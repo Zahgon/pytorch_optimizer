@@ -9,15 +9,6 @@ from pytorch_optimizer.base.type import Closure, Defaults, Loss, OptimizerInstan
 
 
 class Lookahead(BaseOptimizer):
-    """k steps forward, 1 step back.
-
-    Args:
-        optimizer (OptimizerInstanceOrClass): Base optimizer.
-        k (int): Number of lookahead steps.
-        alpha (float): Linear interpolation factor.
-        pullback_momentum (str): Change to inner optimizer momentum on interpolation update.
-
-    """
 
     def __init__(
         self,
@@ -62,7 +53,7 @@ class Lookahead(BaseOptimizer):
 
     @property
     def param_groups(self):
-        return self.optimizer.param_groups
+        pass
 
     def __getstate__(self):
         return {
@@ -75,38 +66,22 @@ class Lookahead(BaseOptimizer):
 
     @torch.no_grad()
     def zero_grad(self, set_to_none: bool = True) -> None:
-        self.optimizer.zero_grad(set_to_none=set_to_none)
+        pass
 
     def init_group(self, group: ParamGroup, **kwargs) -> None:
-        if 'step' not in group:
-            group['step'] = 0
+        pass
 
     def backup_and_load_cache(self) -> None:
-        r"""Backup cache parameters."""
-        for group in self.param_groups:
-            for p in group['params']:
-                state = self.state[p]
-                state['backup_params'] = torch.empty_like(p)
-                state['backup_params'].copy_(p)
-                p.data.copy_(state['slow_params'])
+        pass
 
     def clear_and_load_backup(self) -> None:
-        r"""Load backup parameters."""
-        for group in self.param_groups:
-            for p in group['params']:
-                state = self.state[p]
-                p.data.copy_(state['backup_params'])
-                del state['backup_params']
+        pass
 
     def state_dict(self) -> State:
-        lookahead_state: State = {p: dict(param_state) for p, param_state in self.state.items()}
-        return {'lookahead_state': lookahead_state, 'base_optimizer': self.optimizer.state_dict()}
+        pass
 
     def load_state_dict(self, state: State) -> None:
-        r"""Load state."""
-        lookahead_state = state['lookahead_state']
-        self.state = defaultdict(dict, {p: dict(param_state) for p, param_state in lookahead_state.items()})
-        self.optimizer.load_state_dict(state['base_optimizer'])
+        pass
 
     @torch.no_grad()
     def update(self, group: Dict):
@@ -134,10 +109,4 @@ class Lookahead(BaseOptimizer):
                 self.optimizer.state[p]['momentum_buffer'] = torch.zeros_like(p)
 
     def step(self, closure: Closure = None) -> Loss:
-        loss: Loss = self.optimizer.step(closure)
-        for group in self.param_groups:
-            group['counter'] += 1
-            if group['counter'] >= self.k:
-                group['counter'] = 0
-                self.update(group)
-        return loss
+        pass

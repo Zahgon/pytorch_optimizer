@@ -9,21 +9,6 @@ from pytorch_optimizer.base.type import Betas, Closure, Defaults, Loss, ParamGro
 
 
 class RACS(BaseOptimizer):
-    """Row and Column Scaled SGD.
-
-    Args:
-        params (ParamsT): iterable of parameters to optimize or dicts defining parameter groups.
-        lr (float): learning rate.
-        beta (float): momentum factor.
-        alpha (float): scaler.
-        gamma (float): limiter threshold.
-        weight_decay (float): weight decay (L2 penalty).
-        weight_decouple (bool): the optimizer uses decoupled weight decay as in AdamW.
-        fixed_decay (bool): fix weight decay.
-        eps (float): term added to the denominator to improve numerical stability.
-        maximize (bool): maximize the objective with respect to the params, instead of minimizing.
-
-    """
 
     def __init__(
         self,
@@ -65,99 +50,14 @@ class RACS(BaseOptimizer):
         return 'RACS'
 
     def init_group(self, group: ParamGroup, **kwargs) -> None:
-        if 'step' not in group:
-            group['step'] = 0
+        pass
 
     @torch.no_grad()
     def step(self, closure: Closure = None) -> Loss:
-        loss: Loss = None
-        if closure is not None:
-            with torch.enable_grad():
-                loss = closure()
-
-        for group in self.param_groups:
-            self.init_group(group)
-            group['step'] += 1
-
-            beta = group['beta']
-
-            for p in group['params']:
-                if p.grad is None:
-                    continue
-
-                grad = p.grad
-                if grad.is_sparse:
-                    raise NoSparseGradientError(str(self))
-
-                if torch.is_complex(p):
-                    raise NoComplexParameterError(str(self))
-
-                state = self.state[p]
-
-                if grad.ndim < 2:
-                    grad = grad.reshape(len(grad), 1)
-                elif grad.ndim > 2:
-                    grad = grad.reshape(len(grad), -1)
-
-                if len(state) == 0:
-                    state['s'] = torch.zeros(grad.size(0), dtype=grad.dtype, device=grad.device)
-                    state['q'] = torch.ones(grad.size(1), dtype=grad.dtype, device=grad.device)
-                    state['theta'] = torch.zeros((1,), dtype=grad.dtype, device=grad.device)
-
-                self.apply_weight_decay(
-                    p=p,
-                    grad=grad,
-                    lr=group['lr'],
-                    weight_decay=group['weight_decay'],
-                    weight_decouple=group['weight_decouple'],
-                    fixed_decay=group['fixed_decay'],
-                )
-
-                s, q = state['s'], state['q']
-
-                grad_p2 = grad.pow(2)
-                s.mul_(beta).add_(grad_p2.mean(dim=1), alpha=1.0 - beta)
-                q.mul_(beta).add_(grad_p2.mean(dim=0), alpha=1.0 - beta)
-
-                s_sq = s.add(group['eps']).sqrt_().unsqueeze(1)
-                q_sq = q.add(group['eps']).sqrt_().unsqueeze(0)
-
-                grad_hat = grad / (s_sq * q_sq)
-
-                grad_hat_norm = torch.norm(grad_hat)
-                threshold = (
-                    group['gamma'] / max(grad_hat_norm / (state['theta'] + group['eps']), group['gamma'])
-                    if group['step'] > 1
-                    else 1.0
-                )
-                state['theta'] = grad_hat_norm.mul_(threshold)
-
-                p.add_(grad_hat.view_as(p), alpha=-group['lr'] * group['alpha'] * threshold)
-
-        return loss
+        pass
 
 
 class Alice(BaseOptimizer):
-    """Adaptive low-dimensional subspace estimation.
-
-    Args:
-        params (ParamsT): iterable of parameters to optimize or dicts defining parameter groups.
-        lr (float): learning rate.
-        betas (Betas): coefficients used for computing running averages of gradient and the squared Hessian trace.
-            beta3=0 for Alice-0 optimizer.
-        alpha (float): scaler.
-        alpha_c (float): compensation scaler.
-        update_interval (int): update interval.
-        rank (int): rank.
-        gamma (float): limiter threshold.
-        leading_basis (int): leading basis.
-        weight_decay (float): weight decay (L2 penalty).
-        weight_decouple (bool): the optimizer uses decoupled weight decay as in AdamW.
-        fixed_decay (bool): fix weight decay.
-        eps (float): term added to the denominator to improve numerical stability.
-        maximize (bool): maximize the objective with respect to the params, instead of minimizing.
-
-    """
 
     def __init__(
         self,
@@ -212,30 +112,16 @@ class Alice(BaseOptimizer):
         return 'Alice'
 
     def init_group(self, group: ParamGroup, **kwargs) -> None:
-        if 'step' not in group:
-            group['step'] = 0
+        pass
 
     @staticmethod
     def subspace_iteration(
         a: torch.Tensor, mat: torch.Tensor, num_steps: int = 1
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        r"""Perform subspace iteration."""
-        u = mat
-        for _ in range(num_steps):
-            u, _ = torch.linalg.qr(a @ u)
-
-        return torch.linalg.eigh(u.T @ a @ u)
+        pass
 
     def switch(self, q: torch.Tensor, u_prev: torch.Tensor, rank: int, leading_basis: int) -> torch.Tensor:
-        vals, vecs = self.subspace_iteration(q.to(torch.float32), u_prev.to(torch.float32), num_steps=1)
-
-        leading_indices = torch.argsort(vals, descending=True)[:leading_basis]
-        u_t1 = vecs[:, leading_indices]
-
-        u_c, _ = torch.linalg.qr(torch.eye(q.shape[0], device=q.device) - u_t1 @ u_t1.T)
-        u_t2 = u_c[:, :rank - leading_basis]  # fmt: skip
-
-        return torch.cat([u_t1, u_t2], dim=1).to(q.dtype)
+        pass
 
     @staticmethod
     def compensation(
@@ -247,99 +133,8 @@ class Alice(BaseOptimizer):
         decay_rate: float,
         rank: int,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        m, n = grad.shape
-
-        sigma = u.T @ grad
-
-        p.mul_(decay_rate).add_(grad.pow(2).sum(dim=0) - sigma.pow(2).sum(dim=0), alpha=1.0 - decay_rate).clamp_min_(
-            1e-8
-        )
-
-        d = torch.zeros_like(grad)
-        diag_len: int = min(m, n)
-        d[torch.arange(diag_len), torch.arange(diag_len)] = 1.0 / p.sqrt()[:diag_len]
-
-        c_t = math.sqrt(m - rank) * (grad - u @ sigma) * d if m >= rank else torch.zeros_like(grad)
-
-        n = gamma / max(torch.norm(c_t) / phi, gamma) if phi.item() > 0 else torch.ones_like(phi)
-
-        c_t.mul_(n)
-        phi = torch.norm(c_t)
-
-        return c_t, phi
+        pass
 
     @torch.no_grad()
     def step(self, closure: Closure = None) -> Loss:
-        loss: Loss = None
-        if closure is not None:
-            with torch.enable_grad():
-                loss = closure()
-
-        for group in self.param_groups:
-            self.init_group(group)
-            group['step'] += 1
-
-            beta1, beta2, beta3 = group['betas']
-            rank, leading_basis = group['rank'], group['leading_basis']
-
-            for p in group['params']:
-                if p.grad is None:
-                    continue
-
-                grad = p.grad
-                if grad.is_sparse:
-                    raise NoSparseGradientError(str(self))
-
-                if torch.is_complex(p):
-                    raise NoComplexParameterError(str(self))
-
-                state = self.state[p]
-
-                if grad.ndim < 2:
-                    grad = grad.reshape(len(grad), 1)
-                elif grad.ndim > 2:
-                    grad = grad.reshape(len(grad), -1)
-
-                if len(state) == 0:
-                    m, n = grad.shape
-
-                    state['U'] = torch.zeros((m, rank), dtype=p.dtype, device=p.device)
-                    state['Q'] = torch.zeros((rank, rank), dtype=p.dtype, device=p.device)
-
-                    state['m'] = torch.zeros((rank, n), dtype=p.dtype, device=p.device)
-                    state['v'] = torch.zeros((rank, n), dtype=p.dtype, device=p.device)
-
-                    state['p'] = torch.zeros((n,), dtype=p.dtype, device=p.device)
-                    state['phi'] = torch.zeros((1,), dtype=p.dtype, device=p.device)
-
-                self.apply_weight_decay(
-                    p=p,
-                    grad=grad,
-                    lr=group['lr'],
-                    weight_decay=group['weight_decay'],
-                    weight_decouple=group['weight_decouple'],
-                    fixed_decay=group['fixed_decay'],
-                )
-
-                q, u, m, v = state['Q'], state['U'], state['m'], state['v']
-
-                if group['step'] == 1 or group['step'] % group['update_interval'] == 0:
-                    q_t = beta3 * (u @ q @ u.T) + (1.0 - beta3) * (grad @ grad.T)
-                    u = self.switch(q_t, u, rank, leading_basis)
-
-                sigma = u.T @ grad
-
-                q.mul_(beta3).add_(sigma @ sigma.T, alpha=1.0 - beta3)
-                m.mul_(beta1).add_(sigma, alpha=1.0 - beta1)
-                v.mul_(beta2).add_(sigma.pow(2), alpha=1.0 - beta2)
-
-                c_t, phi = self.compensation(grad, u, state['p'], state['phi'], group['gamma'], beta1, rank)
-
-                update = u @ (m / v.sqrt())
-                update.add_(c_t, alpha=group['alpha_c'])
-
-                p.add_(update.view_as(p), alpha=-group['lr'] * group['alpha'])
-
-                state['phi'] = phi
-
-        return loss
+        pass

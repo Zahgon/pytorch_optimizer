@@ -11,16 +11,10 @@ if HAS_GEOTORCH:
 
 
 def divide(numer: torch.Tensor, de_nom: torch.Tensor, eps: float = 1e-15) -> torch.Tensor:
-    """Numerically stable division."""
-    return (
-        torch.sign(numer)
-        * torch.sign(de_nom)
-        * torch.exp(torch.log(numer.abs() + eps) - torch.log(de_nom.abs() + eps))
-    )
+    pass
 
 
 class VanillaMTL(nn.Module):
-    """VanillaMTL."""
 
     def __init__(self, backbone, heads):
         super().__init__()
@@ -32,14 +26,10 @@ class VanillaMTL(nn.Module):
 
     @property
     def backbone(self):
-        return self._backbone[0]
+        pass
 
     def train(self, mode: bool = True) -> nn.Module:
-        super().train(mode)
-        self.backbone.train(mode)
-        for head in self.heads:
-            head.train(mode)
-        return self
+        pass
 
     def to(self, *args, **kwargs):
         self.backbone.to(*args, **kwargs)
@@ -48,78 +38,30 @@ class VanillaMTL(nn.Module):
         return super().to(*args, **kwargs)
 
     def _hook(self, index):
-        def _hook_(g):
-            self.grads[index] = g
-
-        return _hook_
+        pass
 
     def forward(self, x: torch.Tensor):
-        out = self.backbone(x)
-
-        if isinstance(out, (list, tuple)):
-            rep, extra_out = out[0], out[1:]
-            extra_out = list(extra_out)
-        else:
-            rep = out
-            extra_out = []
-
-        if self.training:
-            self.rep = rep
-
-        preds: List[torch.Tensor] = []
-        for i, head in enumerate(self.heads):
-            rep_i = rep
-            if self.training:
-                rep_i = rep.detach().clone()
-                rep_i.requires_grad = True
-                rep_i.register_hook(self._hook(i))
-
-            out_i = head(rep_i)
-            if isinstance(out_i, (list, tuple)):
-                preds.append(out_i[0])
-                extra_out.append(out_i[1:])
-            else:
-                preds.append(out_i)
-
-        return preds if len(extra_out) == 0 else (preds, extra_out)
+        pass
 
     def backward(self, losses, backbone_loss=None, **kwargs):
-        for loss in losses:
-            loss.backward(**kwargs)
-
-        if backbone_loss is not None:
-            backbone_loss.backward(retain_graph=True)
-
-        self.rep.backward(sum(self.grads))
+        pass
 
     def mtl_parameters(self, recurse=True):
-        return self.parameters(recurse=recurse)
+        pass
 
     def model_parameters(self, recurse=True):
-        for param in self.backbone.parameters(recurse=recurse):
-            yield param
-
-        for h in self.heads:
-            for param in h.parameters(recurse=recurse):
-                yield param
+        pass
 
 
 def rotate(points: torch.Tensor, rotation: torch.Tensor, total_size: int) -> torch.Tensor:
-    """Rotate points with rotation."""
-    if total_size != points.size(-1):
-        points_lo, points_hi = points[:, : rotation.size(1)], points[:, rotation.size(1) :]
-        point_lo = torch.einsum('ij,bj->bi', rotation, points_lo)
-        return torch.cat((point_lo, points_hi), dim=-1)
-    return torch.einsum('ij,bj->bi', rotation, points)
+    pass
 
 
 def rotate_back(points: torch.Tensor, rotation: torch.Tensor, total_size: int) -> torch.Tensor:
-    """Rotate back."""
-    return rotate(points, rotation.t(), total_size)
+    pass
 
 
 class RotateModule(nn.Module):
-    """Base RotateModule."""
 
     def __init__(self, parent, item):
         super().__init__()
@@ -128,45 +70,31 @@ class RotateModule(nn.Module):
         self.item = item
 
     def hook(self, grad: torch.Tensor):
-        self.p.grads[self.item] = grad.clone()
+        pass
 
     @property
     def p(self):
-        return self.parent[0]
+        pass
 
     @property
     def r(self):
-        return self.p.rotation[self.item]
+        pass
 
     @property
     def weight(self):
-        return self.p.weight[self.item] if hasattr(self.p, 'weight') else 1.0
+        pass
 
     def rotate(self, z: torch.Tensor) -> torch.Tensor:
-        return rotate(z, self.r, self.p.latent_size)
+        pass
 
     def rotate_back(self, z: torch.Tensor) -> torch.Tensor:
-        return rotate_back(z, self.r, self.p.latent_size)
+        pass
 
     def forward(self, z: torch.Tensor) -> torch.Tensor:
-        r = self.r.clone().detach()
-        new_z = rotate(z, r, self.p.latent_size)
-        if self.p.training:
-            new_z.register_hook(self.hook)
-        return new_z
+        pass
 
 
 class RotateOnly(nn.Module):
-    """Implementation of the rotating part of RotoGrad as described in the original paper.
-
-    Args:
-        backbone (nn.Module): shared module.
-        heads (List[nn.Module]): task-specific modules.
-        latent_size (int): size of the shared representation, size of the output of the backbone.z.
-        normalized_losses (bool): Whether to use normalized losses to back-propagate through the task-specific
-            parameters as well.
-
-    """
 
     num_tasks: int
     backbone: nn.Module
@@ -211,12 +139,11 @@ class RotateOnly(nn.Module):
 
     @property
     def rotation(self) -> Sequence[torch.Tensor]:
-        """List of rotations matrices, one per task. These are trainable, make sure to call `detach()`."""
-        return [getattr(self, f'rotation_{i}') for i in range(self.num_tasks)]
+        pass
 
     @property
     def backbone(self) -> nn.Module:
-        return self._backbone[0]
+        pass
 
     def to(self, *args, **kwargs):
         self.backbone.to(*args, **kwargs)
@@ -225,11 +152,7 @@ class RotateOnly(nn.Module):
         return super().to(*args, **kwargs)
 
     def train(self, mode: bool = True) -> nn.Module:
-        super().train(mode)
-        self.backbone.train(mode)
-        for head in self.heads:
-            head.train(mode)
-        return self
+        pass
 
     def __len__(self) -> int:
         """Get the number of tasks."""
@@ -240,123 +163,25 @@ class RotateOnly(nn.Module):
         return nn.Sequential(self.backbone, self.heads[item])
 
     def _hook(self, index):
-        def _hook_(g):
-            self.original_grads[index] = g
-
-        return _hook_
+        pass
 
     def forward(self, x: Any) -> Sequence[Any]:
-        """Forward the input through the backbone and all heads, returning a list with all the task predictions."""
-        out = self.backbone(x)
-
-        if isinstance(out, (list, tuple)):
-            rep, extra_out = out[0], out[1:]
-            extra_out = list(extra_out)
-        else:
-            rep = out
-            extra_out = []
-
-        if self.training:
-            self.rep = rep
-
-        preds = []
-        for i, head in enumerate(self.heads):
-            rep_i = rep
-            if self.training:
-                rep_i = rep.detach().clone()
-                rep_i.requires_grad = True
-                rep_i.register_hook(self._hook(i))
-
-            out_i = head(rep_i)
-            if isinstance(out_i, (list, tuple)):
-                preds.append(out_i[0])
-                extra_out.append(out_i[1:])
-            else:
-                preds.append(out_i)
-
-        return preds if len(extra_out) == 0 else (preds, extra_out)
+        pass
 
     def backward(self, losses: Sequence[torch.Tensor], backbone_loss=None, **kwargs) -> None:
-        """Compute the backward computations for the entire model.
-
-        It also computes the gradients for the rotation matrices.
-
-        Args:
-            losses (Sequence[torch.Tensor]): losses.
-            backbone_loss (Optional[torch.Tensor]): backbone loss.
-            **kwargs: a keyword arguments.
-
-        """
-        if not self.training:
-            raise AssertionError('Backward should only be called when training')
-
-        if self.iteration_counter in (0, self.burn_in_period):
-            for i, loss in enumerate(losses):
-                self.initial_losses[i] = loss.item()
-
-            if self.normalize_losses and backbone_loss is not None:
-                self.initial_backbone_loss = backbone_loss.item()
-
-        self.iteration_counter += 1
-
-        for i in range(len(losses)):
-            loss = losses[i] / self.initial_losses[i]
-            self.losses[i] = loss.item()
-
-            if self.normalize_losses:
-                loss.backward(**kwargs)
-            else:
-                losses[i].backward(**kwargs)
-
-        if backbone_loss is not None:
-            if self.normalize_losses:
-                (backbone_loss / self.initial_backbone_loss).backward(retain_graph=True)
-            else:
-                backbone_loss.backward(retain_graph=True)
-
-        self.rep.backward(self._rep_grad())
+        pass
 
     def _rep_grad(self):
-        mean_grad = sum(self.original_grads) / len(self.grads)
-        mean_norm = torch.linalg.norm(mean_grad)
-
-        mean_grad = sum(g * divide(mean_norm, torch.linalg.norm(g)) for g in self.original_grads) / len(self.grads)
-
-        for rotation, grad in zip(self.rotation, self.grads):
-            loss = rotate(mean_grad, rotation, self.latent_size) - grad
-            loss = torch.einsum('bi,bi->b', loss, loss)
-            loss.mean().backward()
-
-        return sum(self.original_grads)
+        pass
 
     def mtl_parameters(self, recurse: bool = True):
-        return self.parameters(recurse=recurse)
+        pass
 
     def model_parameters(self, recurse=True):
-        for param in self.backbone.parameters(recurse=recurse):
-            yield param
-
-        for h in self.heads:
-            for param in h.parameters(recurse=recurse):
-                yield param
+        pass
 
 
 class RotoGrad(RotateOnly):
-    r"""Implementation of RotoGrad as described in the original paper.
-
-    Args:
-        backbone (nn.Module): shared module.
-        heads (Sequence[nn.Module]): task-specific modules.
-        latent_size (int): size of the shared representation, size of the output of the backbone.z.
-        burn_in_period (int): When back-propagating towards the shared parameters, each task loss is normalized
-            dividing by its initial value, \(L_k(t) / L_k(t_0=0)\). This parameter sets a number of iterations
-            after which the denominator will be replaced by the value of the loss at that iteration, that is,
-            \(t_0 = burn\_in\_period\). This is done to overcome problems with losses quickly changing
-            in the first iterations.
-        normalize_losses (bool): Whether to use these normalized losses to back-propagate through the task-specific
-            parameters as well.
-
-    """
 
     num_tasks: int
     backbone: nn.Module
@@ -378,40 +203,10 @@ class RotoGrad(RotateOnly):
         self.counter: int = 0
 
     def _rep_grad(self):
-        super()._rep_grad()
-
-        grad_norms = [torch.linalg.norm(g, keepdim=True).clamp_min(1e-15) for g in self.original_grads]
-        if self.initial_grads is None or self.counter == self.burn_in_period:
-            self.initial_grads = grad_norms
-            conv_ratios = [torch.ones((1,)) for _ in range(len(self.initial_grads))]
-        else:
-            conv_ratios = [x / y for x, y in zip(grad_norms, self.initial_grads)]
-
-        self.counter += 1
-
-        alphas = [x / torch.clamp(sum(conv_ratios), 1e-15) for x in conv_ratios]
-        weighted_sum_norms = sum(a * g for a, g in zip(alphas, grad_norms))
-
-        return sum(g / n * weighted_sum_norms for g, n in zip(self.original_grads, grad_norms))
+        pass
 
 
 class RotoGradNorm(RotoGrad):
-    r"""Implementation of RotoGrad as described in the original paper.
-
-    Args:
-        backbone (nn.Module): shared module.
-        heads (Sequence[nn.Module]): task-specific modules.
-        latent_size (int): size of the shared representation, size of the output of the backbone.z.
-        alpha (float): \\(\alpha\\) hyper-parameter as described in GradNorm, used to compute the reference direction.
-        burn_in_period (int): When back-propagating towards the shared parameters, each task loss is normalized
-            dividing by its initial value, \\(L_k(t) / L_k(t_0=0)\\). This parameter sets a number of iterations
-            after which the denominator will be replaced by the value of the loss at that iteration,
-            \\(t_0 = burn\\_in\\_period\\).
-            This is done to overcome problems with losses quickly changing in the first iterations.
-        normalize_losses (bool): Whether to use these normalized losses to back-propagate through the task-specific
-            parameters as well.
-
-    """
 
     def __init__(
         self,
@@ -431,27 +226,7 @@ class RotoGradNorm(RotoGrad):
 
     @property
     def weight(self) -> Sequence[torch.Tensor]:
-        """List of task weights, one per task. These are trainable, make sure to call `detach()`."""
-        ws = [w.exp() + 1e-15 for w in self.weight_]
-        norm_coef = self.num_tasks / sum(ws)
-        return [w * norm_coef for w in ws]
+        pass
 
     def _rep_grad(self):
-        super()._rep_grad()
-
-        grads_norm = [torch.linalg.norm(g) for g in self.original_grads]
-
-        mean_grad = sum(g * w for g, w in zip(self.original_grads, self.weight)) / len(self.grads)
-
-        mean_grad_norm = torch.linalg.norm(mean_grad)
-        mean_loss = sum(self.losses) / len(self.losses)
-
-        for i, (loss, grad) in enumerate(zip(self.losses, grads_norm)):
-            inverse_ratio_i = (loss / mean_loss) ** self.alpha
-            mean_grad_i = mean_grad_norm * float(inverse_ratio_i)
-
-            loss_grad_norm = torch.abs(grad * self.weight[i] - mean_grad_i)
-            loss_grad_norm.backward()
-
-        with torch.no_grad():
-            return sum(g * w for g, w in zip(self.original_grads, self.weight))
+        pass

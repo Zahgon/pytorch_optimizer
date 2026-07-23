@@ -1,7 +1,3 @@
-"""Copyright (C) 2020 Jeremy Bernstein, Arash Vahdat, Yisong Yue & Ming-Yu Liu.  All rights reserved.
-
-Licensed under the CC BY-NC-SA 4.0 license (https://creativecommons.org/licenses/by-nc-sa/4.0/).
-"""
 
 import math
 from typing import Optional
@@ -14,16 +10,6 @@ from pytorch_optimizer.base.type import Closure, Defaults, Loss, ParamGroup, Par
 
 
 class Fromage(BaseOptimizer):
-    """On the distance between two neural networks and the stability of learning.
-
-    Args:
-        params (ParamsT): Iterable of parameters to optimize or dicts defining parameter groups.
-        lr (float): Learning rate.
-        p_bound (Optional[float]): Restricts the optimization to a bounded set. For example, a value of 2.0 restricts
-            parameter norms to lie within 2x their initial norms, which helps regularize the model class.
-        maximize (bool): Maximize the objective with respect to the params, instead of minimizing.
-
-    """
 
     def __init__(
         self, params: ParamsT, lr: float = 1e-2, p_bound: Optional[float] = None, maximize: bool = False, **kwargs
@@ -41,59 +27,8 @@ class Fromage(BaseOptimizer):
         return 'Fromage'
 
     def init_group(self, group: ParamGroup, **kwargs) -> None:
-        if 'step' not in group:
-            group['step'] = 0
-
-        for p in group['params']:
-            if p.grad is None:
-                continue
-
-            grad = p.grad
-            if grad.is_sparse:
-                raise NoSparseGradientError(str(self))
-
-            state = self.state[p]
-
-            if len(state) == 0 and self.p_bound is not None:
-                state['max'] = p.norm().mul_(self.p_bound)
+        pass
 
     @torch.no_grad()
     def step(self, closure: Closure = None) -> Loss:
-        loss: Loss = None
-        if closure is not None:
-            with torch.enable_grad():
-                loss = closure()
-
-        for group in self.param_groups:
-            self.init_group(group)
-            group['step'] += 1
-
-            pre_factor: float = math.sqrt(1 + group['lr'] ** 2)
-
-            for p in group['params']:
-                if p.grad is None:
-                    continue
-
-                grad = p.grad
-
-                self.maximize_gradient(grad, maximize=self.maximize)
-
-                state = self.state[p]
-
-                p, grad = self.view_as_real(p, grad)
-
-                p_norm, g_norm = p.norm(), grad.norm()
-
-                if p_norm > 0.0 and g_norm > 0.0:
-                    p.add_(grad * (p_norm / g_norm), alpha=-group['lr'])
-                else:
-                    p.add_(grad, alpha=-group['lr'])
-
-                p.div_(pre_factor)
-
-                if self.p_bound is not None:
-                    p_norm = p.norm()
-                    if p_norm > state['max']:
-                        p.mul_(state['max']).div_(p_norm)
-
-        return loss
+        pass

@@ -35,21 +35,6 @@ def soft_jaccard_score(
 
 
 class JaccardLoss(_Loss):
-    r"""Jaccard loss for image segmentation.
-
-    Reference: https://github.com/BloodAxe/pytorch-toolbelt
-
-    Args:
-        mode (str): Loss mode, one of 'binary', 'multiclass', or 'multilabel'.
-        classes (Optional[List[int]]): List of classes to include in the loss computation,
-            defaults to all classes if None.
-        log_loss (bool): If True, loss is computed as -log(jaccard);
-            otherwise, 1 - jaccard.
-        from_logits (bool): If True, input is raw logits, which will be converted to probabilities.
-        label_smooth (float): Label smoothing constant.
-        eps (float): Small number to prevent division by zero.
-
-    """
 
     def __init__(
         self,
@@ -73,47 +58,4 @@ class JaccardLoss(_Loss):
         self.eps = eps
 
     def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
-        if self.from_logits:
-            # Apply activations to get [0..1] class probabilities
-            # Using Log-Exp as this gives more numerically stable result and does not cause vanishing gradient on
-            # extreme values 0 and 1
-            y_pred = y_pred.log_softmax(dim=1).exp() if self.mode == 'multiclass' else logsigmoid(y_pred).exp()
-
-        bs: int = y_true.size(0)
-        num_classes: int = y_pred.size(1)
-
-        dims: Tuple[int, ...] = (0, 2)
-
-        if self.mode == 'binary':
-            y_true = y_true.view(bs, 1, -1)
-            y_pred = y_pred.view(bs, 1, -1)
-
-        if self.mode == 'multiclass':
-            y_true = y_true.view(bs, -1)
-            y_pred = y_pred.view(bs, num_classes, -1)
-
-            y_true = one_hot(y_true, num_classes)
-            y_true = y_true.permute(0, 2, 1)
-
-        if self.mode == 'multilabel':
-            y_true = y_true.view(bs, num_classes, -1)
-            y_pred = y_pred.view(bs, num_classes, -1)
-
-        scores = soft_jaccard_score(
-            y_pred, y_true.type(y_pred.dtype), label_smooth=self.label_smooth, eps=self.eps, dims=dims
-        )
-
-        loss = -torch.log(scores.clamp_min(self.eps)) if self.log_loss else 1.0 - scores
-
-        # IoU loss is defined for non-empty classes
-        # So we zero contribution of channel that does not have true pixels
-        # NOTE: A better workaround would be to use loss term `mean(y_pred)`
-        # for this case, however it will be a modified jaccard loss
-
-        mask = y_true.sum(dims) > 0
-        loss *= mask.float()
-
-        if self.classes is not None:
-            loss = loss[self.classes]
-
-        return loss.mean()
+        pass

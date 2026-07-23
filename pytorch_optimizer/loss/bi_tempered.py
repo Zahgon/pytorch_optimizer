@@ -15,90 +15,22 @@ def exp_t(u: torch.Tensor, t: float) -> torch.Tensor:
 
 
 def compute_normalization_fixed_point(activations: torch.Tensor, t: float, num_iters: int) -> torch.Tensor:
-    r"""Return the normalization value for each example (t > 1.0).
-
-    Args:
-        activations (torch.Tensor): A multi-dimensional tensor with the last dimension representing classes.
-        t (float): Temperature value (> 1.0 for tail heaviness).
-        num_iters (int): Number of iterations to run the method.
-
-    """
-    mu, _ = torch.max(activations, dim=-1, keepdim=True)
-
-    normalized_activations_step_0 = activations - mu
-
-    normalized_activations = normalized_activations_step_0
-
-    for _ in range(num_iters):
-        logt_partition = torch.sum(exp_t(normalized_activations, t), dim=-1, keepdim=True)
-        normalized_activations = normalized_activations_step_0 * logt_partition.pow(1.0 - t)
-
-    logt_partition = torch.sum(exp_t(normalized_activations, t), dim=-1, keepdim=True)
-
-    return -log_t(1.0 / logt_partition, t) + mu
+    pass
 
 
 def compute_normalization_binary_search(activations: torch.Tensor, t: float, num_iters: int) -> torch.Tensor:
-    """Compute normalization value for each example (t < 1.0).
-
-    Args:
-        activations (torch.Tensor): A multidimensional tensor with the last dimension `num_classes`.
-        t (float): Temperature parameter (< 1.0 for peak sharpening).
-        num_iters (int): Number of iterations to run the normalization.
-
-    """
-    mu, _ = torch.max(activations, dim=-1, keepdim=True)
-    normalized_activations = activations - mu
-
-    effective_dim = torch.sum((normalized_activations > -1.0 / (1.0 - t)).to(torch.int32), dim=-1, keepdim=True).to(
-        activations.dtype
-    )
-
-    shape_partition: Tuple[int, ...] = (*activations.shape[:-1], 1)
-
-    lower = torch.zeros(shape_partition, dtype=activations.dtype, device=activations.device)
-    upper = -log_t(1.0 / effective_dim, t) * torch.ones_like(lower)
-
-    for _ in range(num_iters):
-        logt_partition = (upper + lower) / 2.0
-        sum_probs = torch.sum(exp_t(normalized_activations - logt_partition, t), dim=-1, keepdim=True)
-        update = (sum_probs < 1.0).to(activations.dtype)
-        lower = torch.reshape(lower * update + (1.0 - update) * logt_partition, shape_partition)
-        upper = torch.reshape(upper * (1.0 - update) + update * logt_partition, shape_partition)
-
-    logt_partition = (upper + lower) / 2.0
-
-    return logt_partition + mu
+    pass
 
 
 class ComputeNormalization(torch.autograd.Function):
-    """Custom backward pass for compute_normalization. See compute_normalization."""
 
     @staticmethod
     def forward(ctx, activations: torch.Tensor, t: float, num_iters: int) -> torch.Tensor:
-        normalization_constants = (
-            compute_normalization_binary_search(activations, t, num_iters)
-            if t < 1.0
-            else compute_normalization_fixed_point(activations, t, num_iters)
-        )
-
-        ctx.save_for_backward(activations, normalization_constants)
-        ctx.t = t
-
-        return normalization_constants
+        pass
 
     @staticmethod
     def backward(ctx, grad_output):
-        activations, normalization_constants = ctx.saved_tensors
-        t = ctx.t
-
-        normalized_activations = activations - normalization_constants
-        probabilities = exp_t(normalized_activations, t)
-        escorts = probabilities.pow(t)
-        escorts = escorts / escorts.sum(dim=-1, keepdim=True)
-        grad_input = escorts * grad_output
-
-        return grad_input, None, None
+        pass
 
 
 def compute_normalization(activations: torch.Tensor, t: float, num_iters: int = 5) -> torch.Tensor:
@@ -182,19 +114,6 @@ def bi_tempered_logistic_loss(
 
 
 class BiTemperedLogisticLoss(nn.Module):
-    """Bi-Tempered Log Loss.
-
-    Reference:
-        https://github.com/BloodAxe/pytorch-toolbelt/blob/develop/pytorch_toolbelt/losses/bitempered_loss.py
-
-    Args:
-        t1 (float): Temperature 1 (< 1.0 for boundedness).
-        t2 (float): Temperature 2 (> 1.0 for tail heaviness, < 1.0 for finite support).
-        label_smooth (float): Label smoothing parameter between 0 and 1.
-        ignore_index (Optional[int]): Index to ignore during loss calculation.
-        reduction (str): Type of reduction to apply to output, e.g. 'mean', 'sum', or 'none'.
-
-    """
 
     def __init__(
         self,
@@ -212,33 +131,10 @@ class BiTemperedLogisticLoss(nn.Module):
         self.reduction = reduction
 
     def forward(self, predictions: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
-        loss = bi_tempered_logistic_loss(
-            predictions, targets, t1=self.t1, t2=self.t2, label_smooth=self.label_smooth, reduction='none'
-        )
-
-        if self.ignore_index is not None:
-            mask = ~targets.eq(self.ignore_index)
-            loss *= mask
-
-        if self.reduction == 'mean':
-            loss = loss.mean()
-        elif self.reduction == 'sum':
-            loss = loss.sum()
-        return loss
+        pass
 
 
 class BinaryBiTemperedLogisticLoss(nn.Module):
-    """Bi-Tempered Logistic Loss for Binary Classification.
-
-    Args:
-        t1 (float): Temperature 1 (< 1.0 for boundedness of the loss).
-        t2 (float): Temperature 2 (> 1.0 for tail heaviness, < 1.0 for finite support).
-        label_smooth (float): Label smoothing parameter between 0 and 1.
-        ignore_index (Optional[int]): Specifies a target value that is ignored and does not contribute
-            to the input gradient.
-        reduction (str): Specifies the reduction to apply to the output: 'none', 'mean', or 'sum'.
-
-    """
 
     def __init__(
         self,
@@ -256,24 +152,4 @@ class BinaryBiTemperedLogisticLoss(nn.Module):
         self.reduction = reduction
 
     def forward(self, predictions: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
-        if predictions.size(1) != 1 or targets.size(1) != 1:
-            raise ValueError('Channel dimension for predictions and targets must be equal to 1')
-
-        loss = bi_tempered_logistic_loss(
-            torch.cat((-predictions, predictions), dim=1).moveaxis(1, -1),
-            torch.cat((1.0 - targets, targets), dim=1).moveaxis(1, -1),
-            t1=self.t1,
-            t2=self.t2,
-            label_smooth=self.label_smooth,
-            reduction='none',
-        ).unsqueeze(dim=1)
-
-        if self.ignore_index is not None:
-            mask = targets.eq(self.ignore_index)
-            loss = torch.masked_fill(loss, mask, value=0)
-
-        if self.reduction == 'mean':
-            loss = loss.mean()
-        elif self.reduction == 'sum':
-            loss = loss.sum()
-        return loss
+        pass

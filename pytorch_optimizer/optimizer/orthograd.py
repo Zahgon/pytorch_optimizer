@@ -8,14 +8,6 @@ from pytorch_optimizer.base.type import Closure, Defaults, Loss, OptimizerInstan
 
 
 class OrthoGrad(BaseOptimizer):
-    """Grokking at the Edge of Numerical Stability.
-
-    A wrapper optimizer that projects gradients to be orthogonal to the current parameters before performing an update.
-
-    Args:
-        optimizer (OptimizerInstanceOrClass): Base optimizer.
-
-    """
 
     def __init__(self, optimizer: OptimizerInstanceOrClass, **kwargs) -> None:
         self._optimizer_step_pre_hooks: Dict[int, Callable] = {}
@@ -31,43 +23,29 @@ class OrthoGrad(BaseOptimizer):
 
     @property
     def param_groups(self):
-        return self.optimizer.param_groups
+        pass
 
     @property
     def state(self) -> State:
-        return self.optimizer.state
+        pass
 
     def state_dict(self) -> State:
-        return self.optimizer.state_dict()
+        pass
 
     def load_state_dict(self, state_dict: State) -> None:
-        self.optimizer.load_state_dict(state_dict)
+        pass
 
     @torch.no_grad()
     def zero_grad(self, set_to_none: bool = True) -> None:
-        self.optimizer.zero_grad(set_to_none=set_to_none)
+        pass
 
     def init_group(self, group: ParamGroup, **kwargs) -> None:
-        if 'step' not in group:
-            group['step'] = 0
+        pass
 
     @torch.no_grad()
     def apply_orthogonal_gradients(self, params) -> None:
-        for p in params:
-            if p.grad is None or p.grad.is_sparse or torch.is_complex(p):
-                continue
-
-            w = p.view(-1)
-            g = p.grad.view(-1)
-
-            proj = torch.dot(w, g).div_(torch.dot(w, w).add_(self.eps))
-            g_ortho = g.to(dtype=torch.float32, copy=True).sub_(w, alpha=proj)
-            g_ortho_scaled = g_ortho.mul_(g.norm(2).div_(g_ortho.norm(2).add_(self.eps)))
-
-            p.grad.copy_(g_ortho_scaled.view_as(p.grad))
+        pass
 
     @torch.no_grad()
     def step(self, closure: Closure = None) -> Loss:
-        for group in self.param_groups:
-            self.apply_orthogonal_gradients(group['params'])
-        return self.optimizer.step(closure)
+        pass

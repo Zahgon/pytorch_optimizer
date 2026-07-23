@@ -23,11 +23,9 @@ NewtonSchulzWeights = Union[str, NewtonSchulzWeight, List[NewtonSchulzWeight], T
 
 NS_COEFFICIENTS = {
     'original': [
-        # Keller Jordan's Muon.
         (3.4445, -4.7750, 2.0315),
     ],
     'quintic': [
-        # Optimized quintic schedules from modded-nanogpt.
         (4.0848, -6.8946, 2.9270),
         (3.9505, -6.3029, 2.6377),
         (3.7418, -5.5913, 2.3037),
@@ -35,7 +33,6 @@ NS_COEFFICIENTS = {
         (2.8366, -3.0525, 1.2012),
     ],
     'polar_express': [
-        # Polar Express schedule with safety 1e-2.
         (8.237312490495555, -23.157747414558198, 16.680568411445915),
         (4.082441999064835, -2.893047735332586, 0.5252849256975648),
         (3.9263479922546582, -2.8547468034765298, 0.5318022422894988),
@@ -46,7 +43,6 @@ NS_COEFFICIENTS = {
         (1.8749994008682747, -1.2499988017229169, 0.3749994008546422),
     ],
     'polar_express_safer': [
-        # Polar Express safer schedule with safety 2e-2.
         (8.156554524902461, -22.48329292557795, 15.878769915207462),
         (4.0429299351667245, -2.808917465908704, 0.5000178451051299),
         (3.8916678022926563, -2.7724841532176825, 0.5060648178503389),
@@ -68,7 +64,6 @@ def get_newton_schulz_weights(weights: NewtonSchulzWeights) -> List[NewtonSchulz
 
         raise ValueError(f'Invalid `weights` string choice. expected one of {tuple(NS_COEFFICIENTS.keys())}.')
 
-    # Single coefficient tuple, e.g. (3.4445, -4.7750, 2.0315).
     if isinstance(weights, tuple) and len(weights) == 3:
         w0, w1, w2 = weights
         if isinstance(w0, (int, float)) and isinstance(w1, (int, float)) and isinstance(w2, (int, float)):
@@ -89,14 +84,6 @@ def get_newton_schulz_weights(weights: NewtonSchulzWeights) -> List[NewtonSchulz
 
 
 class LayerWiseGrafting(IntEnum):
-    """Layer-wise grafting.
-
-    Grafting is a technique to fix the layer-wise scale of Shampoo optimizer.
-    https://arxiv.org/pdf/2002.11803.pdf studies this in detail. This
-    allows us to plugin the Shampoo optimizer into settings where SGD/AdaGrad
-    is already well tuned. Grafting onto Shampoo means take the Shampoo direction,
-    but use the step magnitude from the grafted optimizer such as Adagrad or SGD.
-    """
 
     NONE = 0
     SGD = 1
@@ -106,7 +93,6 @@ class LayerWiseGrafting(IntEnum):
 
 
 class Graft:
-    """Base class to perform grafting onto Shampoo. This class does no grafting."""
 
     def __init__(self, *args):
         pass
@@ -115,46 +101,32 @@ class Graft:
         """Add the statistics."""
 
     def precondition_gradient(self, grad: torch.Tensor) -> torch.Tensor:
-        """Get preconditioned gradient."""
-        return grad
+        pass
 
     def update_momentum(self, update: torch.Tensor, beta1: float) -> torch.Tensor:
-        """Update momentum."""
-        return update
+        pass
 
 
 class SGDGraft(Graft):
-    """Graft using SGD + momentum. momentum maintains an exponentially weighted moving average of gradients."""
 
     def __init__(self, var: torch.Tensor):
         super().__init__(var)
         self.momentum: torch.Tensor = torch.zeros_like(var)
 
     def update_momentum(self, update: torch.Tensor, beta1: float) -> torch.Tensor:
-        """Update momentum."""
-        self.momentum.mul_(beta1).add_(update)
-        return self.momentum
+        pass
 
 
 class SQRTNGraft(Graft):
-    """Graft using SQRT-N."""
 
     def __init__(self, var: torch.Tensor):
         super().__init__(var)
 
     def precondition_gradient(self, grad: torch.Tensor) -> torch.Tensor:
-        """Get preconditioned gradient."""
-        return grad.sign()
+        pass
 
 
 class AdaGradGraft(SGDGraft):
-    """Graft using AdaGrad with momentum.
-
-    Args:
-        var (torch.Tensor): variable to be optimized.
-        diagonal_eps (float): small epsilon added to diagonal for numerical stability.
-
-    """
 
     def __init__(self, var: torch.Tensor, diagonal_eps: float):
         super().__init__(var)
@@ -162,22 +134,13 @@ class AdaGradGraft(SGDGraft):
         self.statistics: torch.Tensor = torch.zeros_like(var)
 
     def add_statistics(self, grad: torch.Tensor, _) -> None:
-        """Add the statistics."""
-        self.statistics.add_(grad.pow(2))
+        pass
 
     def precondition_gradient(self, grad: torch.Tensor) -> torch.Tensor:
-        """Get preconditioned gradient."""
-        return grad.div(self.statistics.sqrt().add_(self.diagonal_eps))
+        pass
 
 
 class RMSPropGraft(SGDGraft):
-    """Graft using RMSProp with momentum.
-
-    Args:
-        var (torch.Tensor): variable to optimize.
-        diagonal_eps (float): small epsilon added to diagonal for numerical stability.
-
-    """
 
     def __init__(self, var: torch.Tensor, diagonal_eps: float):
         super().__init__(var)
@@ -185,27 +148,13 @@ class RMSPropGraft(SGDGraft):
         self.statistics: torch.Tensor = torch.zeros_like(var)
 
     def add_statistics(self, grad: torch.Tensor, beta2: float) -> None:
-        """Add the statistics."""
-        self.statistics.mul_(beta2).addcmul_(grad, grad, value=1.0 - beta2)
+        pass
 
     def precondition_gradient(self, grad: torch.Tensor) -> torch.Tensor:
-        """Get preconditioned gradient."""
-        return grad.div(self.statistics.sqrt().add_(self.diagonal_eps))
+        pass
 
 
 class BlockPartitioner:
-    """Partition a tensor into smaller tensors for preconditioning.
-
-    For example, if a variable has shape (4096, 512), splitting the 4096 dimension into 4 blocks,
-    results in 4 smaller tensors each of shape (1024, 512).
-
-    Args:
-        var (torch.Tensor): tensor variable.
-        rank (int): rank of the tensor.
-        block_size (int): size of each block to partition.
-        pre_conditioner_type (int): type of pre-conditioner used.
-
-    """
 
     def __init__(self, var: torch.Tensor, rank: int, block_size: int, pre_conditioner_type: int):
         self.shape: torch.Size = var.shape
@@ -215,13 +164,11 @@ class BlockPartitioner:
 
         split_sizes: List[torch.Tensor] = []
 
-        # We split var into smaller blocks. Here we store the metadata to make that split.
         for i, d in enumerate(self.shape):
             if block_size <= 0 or block_size >= d:
                 split_sizes.append(torch.tensor([d], dtype=torch.int32))
                 continue
 
-            # d - 1, otherwise split appends a 0-size array.
             num_split: int = (d - 1) // block_size
             indices = (torch.arange(num_split, dtype=torch.int32) + 1) * block_size
 
@@ -241,55 +188,20 @@ class BlockPartitioner:
     def build_pre_conditioner_shapes(
         split_sizes: List[torch.Tensor], pre_conditioner_type: int, rank: int
     ) -> List[List[torch.Tensor]]:
-        """Build pre-conditioner shapes."""
-        pre_conditioner_shapes: List[List[torch.Tensor]] = []
-        for t in itertools.product(*split_sizes):
-            t_shape: List[Union[List[torch.Tensor], None]] = [[d, d] for d in t]
-            if pre_conditioner_type == PreConditionerType.INPUT:
-                t_shape[-1] = None
-            elif pre_conditioner_type == PreConditionerType.OUTPUT:
-                t_shape = [None] * (rank - 1) + t_shape[-1:]
-            pre_conditioner_shapes.extend(t_shape)
-        return pre_conditioner_shapes
+        pass
 
     def shapes_for_pre_conditioners(self) -> List[List[torch.Tensor]]:
-        """Get shapes of pre-conditioner."""
-        return self.pre_conditioner_shapes
+        pass
 
     @torch.no_grad()
     def partition(self, x: torch.Tensor) -> List[torch.Tensor]:
-        """Partition tensor into blocks."""
-        if x.shape != self.shape:
-            raise ValueError(f'self.shape != x.shape ({self.shape} vs {x.shape})')
-
-        tensors = [x]
-        for i, sizes in self.split_sizes:
-            tensors = [torch.split(t, list(sizes), dim=i) for t in tensors]
-            tensors = [t for tensor in tensors for t in tensor]
-        return tensors
+        pass
 
     def merge_partitions(self, partitions: List[torch.Tensor]) -> torch.Tensor:
-        """Merge partitions back to original shape."""
-        merged_partitions = partitions
-        for i, indices in reversed(self.splits):
-            n: int = len(indices) + 1
-
-            # fmt: off
-            merged_partitions: List[torch.Tensor] = [
-                torch.cat(merged_partitions[idx:idx + n], dim=i) for idx in range(0, len(merged_partitions), n)
-            ]
-            # fmt: on
-
-        return merged_partitions[0]
+        pass
 
 
 class PreConditionerType(IntEnum):
-    """Type of PreConditioner.
-
-    In default (ALL), computes pre-conditioner for each dim.
-    INPUT/OUTPUT is one-sided Shampoo, in this case only on input/output dim.
-    Assumes last dim is always the output dim and everything else input dim.
-    """
 
     ALL = 0
     INPUT = 1
@@ -297,22 +209,6 @@ class PreConditionerType(IntEnum):
 
 
 class PreConditioner:
-    """Compute statistics & shape from gradients for preconditioning.
-
-    Args:
-        var (torch.Tensor): tensor variable corresponding to model parameters.
-        beta2 (float): decay rate for second moment estimates.
-        inverse_exponent_override (int): override for inverse exponent used in preconditioning.
-        block_size (int): size of blocks for partitioning large tensors.
-        skip_preconditioning_rank_lt (int): skip preconditioning for tensors with rank less than this.
-        no_preconditioning_for_layers_with_dim_gt (int): skip preconditioning for layers with
-            dimension size greater than this.
-        shape_interpretation (bool): whether to apply automatic shape interpretation for tensor dimensions.
-        pre_conditioner_type (int): type of pre-conditioner to use.
-        matrix_eps (float): epsilon term added for numerical stability in matrix operations.
-        use_svd (bool): use SVD method instead of Schur-Newton method for matrix inverse powers calculation.
-
-    """
 
     def __init__(
         self,
@@ -372,58 +268,16 @@ class PreConditioner:
             self.pre_conditioners = torch.stack(self.pre_conditioners, dim=0)
 
     def get_should_precondition_dims(self) -> List[bool]:
-        """Get pre-condition dimensions by the type of conditioner."""
-        if self.pre_conditioner_type == PreConditionerType.ALL or len(self.transformed_shape) <= 1:
-            return [True] * len(self.transformed_shape)
-        if self.pre_conditioner_type == PreConditionerType.INPUT:
-            return [True] * (len(self.transformed_shape) - 1) + [False]
-        if self.pre_conditioner_type == PreConditionerType.OUTPUT:
-            return [False] * (len(self.transformed_shape) - 1) + [True]
-        raise ValueError
+        pass
 
     def skip_precondition(self, x: torch.Tensor) -> bool:
-        return (len(x.shape) < self.skip_preconditioning_rank_lt) or any(
-            dim > self.no_preconditioning_for_layers_with_dim_gt for dim in x.shape
-        )
+        pass
 
     def add_statistics(self, grad: torch.Tensor) -> None:
-        """Compute statistics from gradients and add to state entries.
-
-        Args:
-            grad (torch.Tensor): gradient tensor from which to compute statistics.
-
-        """
-        if len(self.statistics) == 0:
-            return
-
-        reshaped_grad: torch.Tensor = torch.reshape(grad, self.transformed_shape)
-        partitioned_grads: List[torch.Tensor] = self.partitioner.partition(reshaped_grad)
-
-        for j, partitioned_grad in enumerate(partitioned_grads):
-            for i in range(self.rank):
-                axes: List[int] = [ax for ax in range(partitioned_grad.ndim) if ax != i]
-                stat: torch.Tensor = torch.tensordot(partitioned_grad, partitioned_grad, dims=[axes, axes])
-                self.statistics[j * self.rank + i].mul_(self.beta2).add_(stat, alpha=self.w2)
+        pass
 
     def compute_pre_conditioners(self) -> None:
-        """Compute L^{-1/exp} for each stats matrix L.
-
-        If `self.use_svd` is enabled and where all shapes of statistics & pre-conditioners are same, perform batch SVD.
-        else, SVD one by one.
-        If `self.use_svd` is disabled, use Schur-Newton method, which is usually much faster.
-        """
-        if self.use_svd and self.is_same_shapes:
-            self.pre_conditioners = compute_power_svd(matrix=self.statistics, power=self.exponent_for_pre_conditioner)
-            return
-
-        for i, statistic in enumerate(self.statistics):
-            self.pre_conditioners[i] = (
-                compute_power_svd(matrix=statistic, power=self.exponent_for_pre_conditioner)
-                if self.use_svd
-                else compute_power_schur_newton(
-                    mat_g=statistic, p=self.exponent_for_pre_conditioner, ridge_epsilon=self.matrix_eps
-                )
-            )
+        pass
 
     @staticmethod
     def precondition_block(
@@ -431,52 +285,10 @@ class PreConditioner:
         should_preconditioned_dims: List[bool],
         pre_conditioners_for_grad: Union[List[torch.Tensor], torch.Tensor],
     ) -> torch.Tensor:
-        """Perform a preconditioning operation on a single gradient block.
-
-        Loop invariant: the dimension to be preconditioned is first
-        We keep all axes in the same cyclic order they were originally.
-        """
-        rank: int = len(partitioned_grad.shape)
-        roll: Tuple[int, ...] = (*range(1, rank), 0)
-
-        i: int = 0
-        for should_precondition_dim in should_preconditioned_dims:
-            if not should_precondition_dim:
-                partitioned_grad = torch.permute(partitioned_grad, roll)
-                continue
-
-            partitioned_grad = torch.tensordot(partitioned_grad, pre_conditioners_for_grad[i], dims=[[0], [0]])
-            i += 1
-
-        return partitioned_grad
+        pass
 
     def preconditioned_grad(self, grad: torch.Tensor) -> torch.Tensor:
-        """Precondition the gradient.
-
-        Args:
-            grad (torch.Tensor): gradient tensor to precondition.
-
-        """
-        if len(self.pre_conditioners) == 0:
-            return grad
-
-        reshaped_grad = torch.reshape(grad, self.transformed_shape)
-        partitioned_grads = self.partitioner.partition(reshaped_grad)
-
-        # fmt: off
-        pre_cond_partitioned_grads: List[torch.Tensor] = [
-            self.precondition_block(
-                partitioned_grad,
-                self.should_precondition_dims,
-                self.pre_conditioners[i * self.rank:(i + 1) * self.rank],
-            )
-            for i, partitioned_grad in enumerate(partitioned_grads)
-        ]
-        # fmt: on
-
-        merged_grad = self.partitioner.merge_partitions(pre_cond_partitioned_grads)
-
-        return merged_grad.reshape(self.original_shape)
+        pass
 
 
 def build_graft(p: torch.Tensor, graft_type: int, diagonal_eps: float = 1e-10):
@@ -581,10 +393,6 @@ def compute_power_schur_newton(
 
         error = torch.dist(mat_m, identity, p=torch.inf)
 
-        # NOTE
-        # This is the main bottleneck that slows Scalable Shampoo.
-        # Because it is handled on the Python side so values need to be on the CPU
-        # while XLA devices (e.g. TPU) don't seem to be affected.
         if torch.logical_or(error > prev_error * max_error_ratio, error <= error_tolerance):
             break
 

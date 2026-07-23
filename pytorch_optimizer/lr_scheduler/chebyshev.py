@@ -57,32 +57,7 @@ def get_chebyshev_perm_steps(num_epochs: int) -> np.ndarray:
 
 
 def get_chebyshev_lr_lambda(epoch: int, num_epochs: int, is_warmup: bool = False) -> float:
-    """Get Chebyshev learning rate ratio.
-
-    Args:
-        epoch (int): Current epoch.
-        num_epochs (int): Total number of epochs.
-        is_warmup (bool): Whether it is the warm-up stage.
-
-    Returns:
-        float: Learning rate ratio for the given epoch based on Chebyshev schedule.
-
-    """
-    if is_warmup:
-        return 1.0
-
-    epoch_power: int = np.power(2, int(np.log2(num_epochs - 1)) + 1) if num_epochs > 1 else 1
-    scheduler = get_chebyshev_perm_steps(epoch_power)
-
-    idx: int = epoch - 2
-    if idx < 0:
-        idx = 0
-    elif idx > len(scheduler) - 1:
-        idx = len(scheduler) - 1
-
-    chebyshev_value: float = scheduler[idx]
-
-    return chebyshev_value
+    pass
 
 
 def get_chebyshev_schedule(

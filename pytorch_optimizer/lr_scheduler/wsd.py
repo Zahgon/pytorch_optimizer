@@ -16,10 +16,7 @@ def get_cosine_cooldown_lr_ratio(
     min_lr_ratio: float,
     num_cycles: float,
 ) -> float:
-    """Get Cosine cooldown learning rate ratio."""
-    progress = float(current_step - num_warmup_steps - num_stable_steps) / float(max(1, num_decay_steps))
-    value = max(0.0, 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress)))
-    return (1.0 - min_lr_ratio) * value + min_lr_ratio
+    pass
 
 
 def get_1sqrt_cooldown_lr_ratio(
@@ -28,8 +25,7 @@ def get_1sqrt_cooldown_lr_ratio(
     num_stable_steps: int,
     num_decay_steps: int,
 ) -> float:
-    """Get 1-sqrt cooldown learning rate ratio."""
-    return 1.0 - math.sqrt((current_step - num_warmup_steps - num_stable_steps) / num_decay_steps)
+    pass
 
 
 def get_1square_cooldown_lr_ratio(
@@ -38,8 +34,7 @@ def get_1square_cooldown_lr_ratio(
     num_stable_steps: int,
     num_decay_steps: int,
 ) -> float:
-    """Get 1-square cooldown learning rate ratio."""
-    return 1.0 - math.pow((current_step - num_warmup_steps - num_stable_steps) / num_decay_steps, 2)
+    pass
 
 
 def get_linear_cooldown_lr_ratio(
@@ -48,8 +43,7 @@ def get_linear_cooldown_lr_ratio(
     num_stable_steps: int,
     num_decay_steps: int,
 ) -> float:
-    """Get linear cooldown learning rate ratio."""
-    return 1.0 - (current_step - num_warmup_steps - num_stable_steps) / num_decay_steps
+    pass
 
 
 def get_wsd_scheduler_lambda(  # noqa: PLR0911
@@ -62,34 +56,7 @@ def get_wsd_scheduler_lambda(  # noqa: PLR0911
     num_cycles: float,
     cooldown_type: COOLDOWN_TYPE,
 ) -> float:
-    r"""Get WSD learning rate.
-
-    Args:
-        current_step (int): The number of current steps.
-        num_warmup_steps (int): Number of warmup steps.
-        num_stable_steps (int): Number of stable steps.
-        num_decay_steps (int): Number of decay steps.
-        min_lr_ratio (float): Minimum learning rate as a ratio of the initial learning rate.
-        num_cycles (float): Number of waves in the cosine schedule (default is a half-cosine decay).
-        cooldown_type (COOLDOWN_TYPE): Cooldown type of the learning rate scheduler.
-
-    """
-    if current_step < num_warmup_steps:
-        return float(current_step) / float(max(1, num_warmup_steps))
-    if current_step < num_warmup_steps + num_stable_steps:
-        return 1.0
-    if current_step < num_warmup_steps + num_stable_steps + num_decay_steps:
-        if cooldown_type == 'cosine':
-            return get_cosine_cooldown_lr_ratio(
-                current_step, num_warmup_steps, num_stable_steps, num_decay_steps, min_lr_ratio, num_cycles
-            )
-        if cooldown_type == '1-sqrt':
-            return get_1sqrt_cooldown_lr_ratio(current_step, num_warmup_steps, num_stable_steps, num_decay_steps)
-        if cooldown_type == '1-square':
-            return get_1square_cooldown_lr_ratio(current_step, num_warmup_steps, num_stable_steps, num_decay_steps)
-        if cooldown_type == 'linear':
-            return get_linear_cooldown_lr_ratio(current_step, num_warmup_steps, num_stable_steps, num_decay_steps)
-    return min_lr_ratio
+    pass
 
 
 def get_wsd_schedule(

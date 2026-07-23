@@ -21,7 +21,6 @@ from pytorch_optimizer.optimizer.foreach_utils import foreach_rsqrt_
 
 
 class BaseOptimizer(ABC, Optimizer):
-    """Base optimizer class. Provides common functionalities for the optimizers."""
 
     def __init__(self, params: ParamsT, defaults: Defaults) -> None:
         super().__init__(params, defaults)
@@ -41,52 +40,11 @@ class BaseOptimizer(ABC, Optimizer):
     @staticmethod
     @torch.no_grad()
     def set_hessian(param_groups: ParamsT, state: State, hessian: List[torch.Tensor]) -> None:
-        """Set hessian to state from external source. Generally useful when using functorch as a base.
-
-        Args:
-            param_groups: PARAMETERS. Parameter groups from optimizer.
-            state: STATE. Optimizer state dictionary.
-            hessian: List[torch.Tensor]. Sequence of Hessian tensors to set.
-
-        Example:
-            # Hutchinson's Estimator using Hessian-vector product (HVP)
-            >>> noise = tree_map(lambda v: torch.randn_like(v), params)
-            >>> loss_, hvp_est = jvp(grad(run_model_fn), (params,), (noise,))
-            >>> hessian_diag_est = tree_map(lambda a, b: a * b, hvp_est, noise)
-
-            >>> optimizer.set_hessian(hessian_diag_est)
-            # OR
-            >>> optimizer.step(hessian=hessian_diag_est)
-
-        """
-        i: int = 0
-        for group in param_groups or []:
-            for p in group['params']:
-                if p.size() != hessian[i].size():
-                    raise ValueError(
-                        f'the shape of parameter and hessian does not match. {p.size()} vs {hessian[i].size()}'
-                    )
-
-                state[p]['hessian'] = hessian[i]
-                i += 1
+        pass
 
     @staticmethod
     def zero_hessian(param_groups: ParamsT, state: State, pre_zero: bool = True) -> None:
-        """Zero-out Hessian.
-
-        Args:
-            param_groups (ParamsT): Parameter groups from the optimizer.
-            state (State): Optimizer state dictionary.
-            pre_zero (bool): If True, zero-out the Hessian before computing/updating it.
-
-        """
-        for group in param_groups or []:
-            for p in group['params']:
-                if p.requires_grad and p.grad is not None and not p.grad.is_sparse:
-                    if 'hessian' not in state[p]:
-                        state[p]['hessian'] = torch.zeros_like(p)
-                    elif pre_zero:
-                        state[p]['hessian'].zero_()
+        pass
 
     @staticmethod
     @torch.no_grad()
@@ -97,39 +55,7 @@ class BaseOptimizer(ABC, Optimizer):
         alpha: float = 1.0,
         distribution: HutchinsonG = 'gaussian',
     ) -> None:
-        r"""Hutchinson's approximate Hessian, added to the state under key `hessian`.
-
-        Args:
-            param_groups (ParamsT): Parameter groups from the optimizer.
-            state (State): Optimizer state dictionary.
-            num_samples (int): Number of times to sample noise vector `z` for the trace approximation.
-            alpha (float): Scaling factor for the Hessian estimate.
-            distribution (HutchinsonG): Type of noise distribution used (e.g., Rademacher).
-
-        """
-        if distribution not in ('gaussian', 'rademacher'):
-            raise NotImplementedError(f'hessian with distribution {distribution} is not implemented.')
-
-        params: List[torch.Tensor] = [
-            p
-            for group in param_groups or []
-            for p in group['params']
-            if p.requires_grad and p.grad is not None and not p.grad.is_sparse
-        ]
-        if len(params) == 0:
-            return
-
-        grads = [p.grad for p in params]
-
-        for i in range(num_samples):
-            if distribution == 'rademacher':
-                zs = [torch.randint_like(p, 0, 1) * 2.0 - 1.0 for p in params]
-            else:
-                zs = [torch.randn_like(p) for p in params]
-
-            h_zs = torch.autograd.grad(grads, params, grad_outputs=zs, retain_graph=i < num_samples - 1)
-            for h_z, z, p in zip(h_zs, zs, params):
-                state[p]['hessian'].add_(h_z * z, alpha=alpha / num_samples)
+        pass
 
     @staticmethod
     def apply_weight_decay(
@@ -165,16 +91,7 @@ class BaseOptimizer(ABC, Optimizer):
         lr: float,
         weight_decay: float,
     ) -> None:
-        """Apply cautious weight decay (CWD) in an in-place manner.
-
-        Args:
-            p (torch.Tensor): Parameter tensor to apply weight decay to.
-            update (torch.Tensor): update tensor.
-            lr (float): Learning rate to scale the update.
-            weight_decay (float): Weight decay coefficient (L2 penalty).
-
-        """
-        p.copy_(torch.where(update * p >= 0, p * (1.0 - weight_decay * lr), p))
+        pass
 
     @staticmethod
     def apply_ams_bound(
@@ -184,63 +101,19 @@ class BaseOptimizer(ABC, Optimizer):
         eps: float,
         exp_avg_sq_eps: float = 1e-15,
     ) -> torch.Tensor:
-        """Apply AMSBound variant.
-
-        Args:
-            ams_bound (bool): Whether to apply the AMSBound variant.
-            exp_avg_sq (torch.Tensor): Exponential moving average of squared gradients.
-            max_exp_avg_sq (Optional[torch.Tensor]): Maximum of all exp_avg_sq elements, for AMSBound.
-            eps (float): Small epsilon value for numerical stability.
-            exp_avg_sq_eps (float): Epsilon used specifically for numerical stability in exp_avg_sq computations.
-
-        """
-        if ams_bound:
-            if torch.is_complex(max_exp_avg_sq):
-                max_exp_avg_sq = torch.view_as_real(max_exp_avg_sq)
-
-            torch.maximum(max_exp_avg_sq, exp_avg_sq, out=max_exp_avg_sq)
-            de_nom = max_exp_avg_sq.add(exp_avg_sq_eps)
-        else:
-            de_nom = exp_avg_sq.add(exp_avg_sq_eps)
-
-        return de_nom.sqrt_().add_(eps)
+        pass
 
     @staticmethod
     def debias(beta: float, step: int) -> float:
-        """Adam-style debias correction.
-
-        Args:
-            beta (float): Exponential decay rate for moment estimates.
-            step (int): Current optimization step number.
-
-        """
-        return 1.0 - math.pow(beta, step)  # fmt: skip
+        pass
 
     @staticmethod
     def debias_beta(beta: float, step: int) -> float:
-        r"""Apply the Adam-style debias correction into beta.
-
-        Simplified version of `\^{beta} = beta * (1.0 - beta ** (step - 1)) / (1.0 - beta ** step)`
-
-        Args:
-            beta (float): The original beta decay rate.
-            step (int): Current optimization step number.
-
-        """
-        beta_n: float = math.pow(beta, step)
-        return (beta_n - beta) / (beta_n - 1.0)  # fmt: skip
+        pass
 
     @staticmethod
     def apply_adam_debias(adam_debias: bool, step_size: float, bias_correction1: float) -> float:
-        """Apply AdamD variant.
-
-        Args:
-            adam_debias (bool): If True, only corrects the denominator to avoid inflating step sizes early in training.
-            step_size (float): The step size for the update.
-            bias_correction1 (float): The bias correction factor for the first moment.
-
-        """
-        return step_size if adam_debias else step_size / bias_correction1
+        pass
 
     @staticmethod
     def get_rectify_step_size(
@@ -251,37 +124,7 @@ class BaseOptimizer(ABC, Optimizer):
         n_sma_threshold: int,
         degenerated_to_sgd: bool,
     ) -> Tuple[float, float]:
-        """Get step size for rectify optimizer.
-
-        Args:
-            is_rectify (bool): Whether to apply the rectify variant.
-            step (int): Current step number.
-            lr (float): Base learning rate.
-            beta2 (float): Beta2 parameter from optimizer (momentum term).
-            n_sma_threshold (float): Simple Moving Average (SMA) threshold for rectification.
-            degenerated_to_sgd (bool): Whether to degenerate to SGD if below threshold.
-
-        """
-        step_size: float = lr
-        n_sma: float = 0.0
-
-        if is_rectify:
-            n_sma_max: float = 2.0 / (1.0 - beta2) - 1.0
-            beta2_t: float = beta2 ** step  # fmt: skip
-            n_sma: float = n_sma_max - 2 * step * beta2_t / (1.0 - beta2_t)
-
-            if n_sma >= n_sma_threshold:
-                rt = math.sqrt(
-                    (1.0 - beta2_t) * (n_sma - 4) / (n_sma_max - 4) * (n_sma - 2) / n_sma * n_sma_max / (n_sma_max - 2)
-                )
-            elif degenerated_to_sgd:
-                rt = 1.0
-            else:
-                rt = -1.0
-
-            step_size *= rt
-
-        return step_size, n_sma
+        pass
 
     @staticmethod
     def get_adanorm_gradient(
@@ -310,15 +153,7 @@ class BaseOptimizer(ABC, Optimizer):
 
     @staticmethod
     def get_rms(x: Union[List[torch.Tensor], torch.Tensor]) -> Union[List[torch.Tensor], torch.Tensor]:
-        """Get RMS."""
-        if isinstance(x, torch.Tensor):
-            return x.norm(2).div_(math.sqrt(x.numel()))
-
-        factors: List[float] = [math.sqrt(p.numel()) for p in x]
-        norms = torch._foreach_norm(x, ord=2)
-        torch._foreach_div_(norms, factors)
-
-        return norms  # pyright: ignore[reportReturnType]
+        pass
 
     @staticmethod
     def approximate_sq_grad(
@@ -326,65 +161,15 @@ class BaseOptimizer(ABC, Optimizer):
         exp_avg_sq_col: Union[List[torch.Tensor], torch.Tensor],
         output: Union[List[torch.Tensor], torch.Tensor],
     ) -> None:
-        """Get approximation of EMA of squared gradient."""
-        if isinstance(exp_avg_sq_row, torch.Tensor):
-            r_factor: torch.Tensor = (
-                (exp_avg_sq_row / exp_avg_sq_row.mean(dim=-1, keepdim=True)).rsqrt_().unsqueeze(-1)
-            )
-            c_factor: torch.Tensor = exp_avg_sq_col.unsqueeze(-2).rsqrt()
-            torch.mul(r_factor, c_factor, out=output)
-            return
-
-        row_means = [r.mean(dim=-1, keepdim=True) for r in exp_avg_sq_row]
-
-        r_factors = torch._foreach_div(exp_avg_sq_row, row_means)
-        foreach_rsqrt_(r_factors)
-        r_factors = [r_factor.unsqueeze(-1) for r_factor in r_factors]
-
-        c_factors = [c_factor.unsqueeze(-2) for c_factor in exp_avg_sq_col]
-        foreach_rsqrt_(c_factors)
-
-        torch._foreach_copy_(output, torch._foreach_mul(r_factors, c_factors))
+        pass
 
     @staticmethod
     def apply_cautious(update: torch.Tensor, grad: torch.Tensor) -> None:
-        """Apply the Cautious Optimizer feature.
-
-        Args:
-            update (torch.Tensor): Update tensor, masked in-place.
-            grad (torch.Tensor): Gradient tensor.
-
-        """
-        mask = (update * grad > 0).to(grad.dtype)
-        mask.mul_(mask.numel() / (mask.sum() + 1))
-        update.mul_(mask)
+        pass
 
     @staticmethod
     def can_use_foreach(group: ParamGroup, foreach: Optional[bool]) -> bool:
-        """Check if foreach operations can be used for this parameter group.
-
-        Args:
-            group (ParamGroup): Parameter group dictionary.
-            foreach (Optional[bool]): User-specified foreach preference (None for auto-detect).
-
-        Returns:
-            True if foreach operations should be used, False otherwise.
-
-        """
-        if foreach is False:
-            return False
-
-        has_param: bool = False
-        for p in group['params']:
-            g = p.grad
-            if g is None:
-                continue
-
-            has_param = True
-            if g.is_sparse or torch.is_complex(p):
-                return False
-
-        return has_param
+        pass
 
     @staticmethod
     def collect_trainable_params(
@@ -392,41 +177,7 @@ class BaseOptimizer(ABC, Optimizer):
         state: State,
         state_keys: Optional[List[str]] = None,
     ) -> Tuple[List[torch.Tensor], List[torch.Tensor], Dict[str, List[torch.Tensor]]]:
-        """Collect trainable parameters, gradients, and state tensors from a group.
-
-        Args:
-            group: Parameter group dictionary.
-            state: Optimizer state dictionary.
-            state_keys: List of state keys to collect (e.g., ['exp_avg', 'exp_avg_sq']).
-
-        Returns:
-            Tuple containing:
-            - params: List of parameter tensors with gradients
-            - grads: List of corresponding gradient tensors
-            - state_dict: Dictionary mapping state keys to lists of state tensors
-
-        """
-        if state_keys is None:
-            state_keys = []
-
-        params: List[torch.Tensor] = []
-        grads: List[torch.Tensor] = []
-        state_dict: Dict[str, List[torch.Tensor]] = {key: [] for key in state_keys}
-
-        for p in group['params']:
-            if p.grad is None:
-                continue
-
-            params.append(p)
-            grads.append(p.grad)
-
-            if state_keys:
-                p_state = state[p]
-                for key in state_keys:
-                    if key in p_state:
-                        state_dict[key].append(p_state[key])
-
-        return params, grads, state_dict
+        pass
 
     @staticmethod
     def apply_weight_decay_foreach(
@@ -437,99 +188,47 @@ class BaseOptimizer(ABC, Optimizer):
         weight_decouple: bool,
         fixed_decay: bool,
     ) -> None:
-        """Apply weight decay to a list of parameters.
-
-        Args:
-            params: List of parameter tensors.
-            grads: List of gradient tensors.
-            lr: Learning rate.
-            weight_decay: Weight decay coefficient.
-            weight_decouple: If True, applies decoupled weight decay as in AdamW.
-            fixed_decay: If True, fixes weight decay to not depend on learning rate.
-
-        """
-        if weight_decay == 0.0:
-            return
-
-        if not weight_decouple:
-            torch._foreach_add_(grads, params, alpha=weight_decay)
-            return
-
-        if fixed_decay:
-            factor = 1.0 - weight_decay
-        elif isinstance(lr, Sequence):
-            factor = torch._foreach_mul(lr, -weight_decay)
-            torch._foreach_add_(factor, 1.0)
-        else:
-            factor = 1.0 - weight_decay * lr
-
-        torch._foreach_mul_(params, factor)
+        pass
 
     @staticmethod
     def get_stable_adamw_rms(grad: torch.Tensor, exp_avg_sq: torch.Tensor, eps: float = 1e-16) -> float:
-        """Get StableAdamW RMS.
-
-        Args:
-            grad (torch.Tensor): gradient.
-            exp_avg_sq (torch.Tensor): Exponential moving average of squared gradient.
-            eps (float): Small value to prevent division by zero.
-
-        """
-        return grad.pow(2).div_(exp_avg_sq.clip(min=eps)).mean().sqrt_().clip_(min=1.0).item()
+        pass
 
     @staticmethod
     def validate_range(x: float, name: str, low: float, high: float, range_type: str = '[)') -> None:
-        if range_type == '[)' and not low <= x < high:
-            raise ValueError(f'{name} must be in the range [{low}, {high})')
-        if range_type == '[]' and not low <= x <= high:
-            raise ValueError(f'{name} must be in the range [{low}, {high}]')
-        if range_type == '(]' and not low < x <= high:
-            raise ValueError(f'{name} must be in the range ({low}, {high}]')
-        if range_type == '()' and not low < x < high:
-            raise ValueError(f'{name} must be in the range ({low}, {high})')
+        pass
 
     @staticmethod
     def validate_non_negative(x: Optional[float], name: str) -> None:
-        if x is not None and x < 0.0:
-            raise ValueError(f'{name} must be non-negative')
+        pass
 
     @staticmethod
     def validate_non_positive(x: Optional[float], name: str) -> None:
-        if x is not None and x > 0.0:
-            raise ValueError(f'{name} must be non-positive')
+        pass
 
     @staticmethod
     def validate_positive(x: Union[float, int], name: str) -> None:
-        if x <= 0:
-            raise ValueError(f'{name} must be positive')
+        pass
 
     @staticmethod
     def validate_boundary(constant: float, boundary: float, bound_type: str = 'upper') -> None:
-        if bound_type == 'upper' and constant > boundary:
-            raise ValueError(f'constant {constant} must be in a range of (-inf, {boundary}]')
-        if bound_type == 'lower' and constant < boundary:
-            raise ValueError(f'constant {constant} must be in a range of [{boundary}, inf)')
+        pass
 
     @staticmethod
     def validate_step(step: int, step_type: str) -> None:
-        if step < 1:
-            raise NegativeStepError(step, step_type=step_type)
+        pass
 
     @staticmethod
     def validate_options(x: str, name: str, options: List[str]) -> None:
-        if x not in options:
-            opts: str = ' or '.join([f"'{option}'" for option in options]).strip()
-            raise ValueError(f'{name} {x} must be one of ({opts})')
+        pass
 
     @staticmethod
     def validate_learning_rate(learning_rate: Optional[float]) -> None:
-        if learning_rate is not None and learning_rate < 0.0:
-            raise NegativeLRError(learning_rate)
+        pass
 
     @staticmethod
     def validate_mod(x: int, y: int) -> None:
-        if x % y != 0:
-            raise ValueError(f'{x} must be divisible by {y}')
+        pass
 
     def validate_betas(
         self,
@@ -537,24 +236,10 @@ class BaseOptimizer(ABC, Optimizer):
         beta_range_type: str = '[)',
         beta3_range_type: str = '[]',
     ) -> None:
-        if betas[0] is not None:
-            self.validate_range(betas[0], 'beta1', 0.0, 1.0, range_type=beta_range_type)
-
-        self.validate_range(betas[1], 'beta2', 0.0, 1.0, range_type=beta_range_type)
-
-        if len(betas) < 3:
-            return
-
-        if betas[2] is not None:
-            self.validate_range(betas[2], 'beta3', 0.0, 1.0, range_type=beta3_range_type)
+        pass
 
     def validate_nus(self, nus: Union[float, Tuple[float, float]]) -> None:
-        if isinstance(nus, tuple):
-            nu1, nu2 = nus
-            self.validate_range(nu1, 'nu1', 0.0, 1.0, range_type='[]')
-            self.validate_range(nu2, 'nu2', 0.0, 1.0, range_type='[]')
-        else:
-            self.validate_range(nus, 'nu', 0.0, 1.0, range_type='[]')
+        pass
 
     @abstractmethod
     def init_group(self, group: ParamGroup, **kwargs) -> None:  # pragma: no cover

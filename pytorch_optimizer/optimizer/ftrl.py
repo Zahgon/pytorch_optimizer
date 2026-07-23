@@ -6,18 +6,6 @@ from pytorch_optimizer.base.type import Closure, Defaults, Loss, ParamGroup, Par
 
 
 class FTRL(BaseOptimizer):
-    """Follow The Regularized Leader.
-
-    Args:
-        params (ParamsT): Iterable of parameters to optimize or dicts defining parameter groups.
-        lr (float): Learning rate.
-        lr_power (float): Controls how the learning rate decreases during training. Use zero for a fixed learning rate.
-        beta (float): Beta value as described in the paper.
-        lambda_1 (float): L1 regularization parameter.
-        lambda_2 (float): L2 regularization parameter.
-        maximize (bool): Maximize the objective with respect to the params, instead of minimizing.
-
-    """
 
     def __init__(
         self,
@@ -46,59 +34,8 @@ class FTRL(BaseOptimizer):
         return 'FTRL'
 
     def init_group(self, group: ParamGroup, **kwargs) -> None:
-        if 'step' not in group:
-            group['step'] = 0
-
-        for p in group['params']:
-            if p.grad is None:
-                continue
-
-            grad = p.grad
-            if grad.is_sparse:
-                raise NoSparseGradientError(str(self))
-
-            state = self.state[p]
-
-            if len(state) == 0:
-                state['z'] = torch.zeros_like(p)
-                state['n'] = torch.zeros_like(p)
+        pass
 
     @torch.no_grad()
     def step(self, closure: Closure = None) -> Loss:
-        loss: Loss = None
-        if closure is not None:
-            with torch.enable_grad():
-                loss = closure()
-
-        for group in self.param_groups:
-            self.init_group(group)
-            group['step'] += 1
-
-            for p in group['params']:
-                if p.grad is None:
-                    continue
-
-                grad = p.grad
-
-                self.maximize_gradient(grad, maximize=self.maximize)
-
-                state = self.state[p]
-
-                z, n = state['z'], state['n']
-
-                p, grad, z, n = self.view_as_real(p, grad, z, n)
-
-                grad_p2 = grad.pow(2)
-
-                sigma = (n + grad_p2).pow_(-group['lr_power']).sub_(n.pow(-group['lr_power'])).div_(group['lr'])
-
-                z.add_(grad).sub_(sigma.mul(p))
-                n.add_(grad_p2)
-
-                update = z.sign().mul_(group['lambda_1']).sub_(z)
-                update.div_((group['beta'] + n.sqrt()).div_(group['lr']).add_(group['lambda_2']))
-
-                p.copy_(update)
-                p.masked_fill_(z.abs() < group['lambda_1'], 0.0)
-
-        return loss
+        pass

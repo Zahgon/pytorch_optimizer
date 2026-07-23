@@ -8,16 +8,6 @@ from pytorch_optimizer.base.type import Closure, Defaults, Loss, ParamGroup, Par
 
 
 class SRMM(BaseOptimizer):
-    """Stochastic regularized majorization-minimization with weakly convex and multi-convex surrogates.
-
-    Args:
-        params (ParamsT): Iterable of parameters to optimize or dicts defining parameter groups.
-        lr (float): Learning rate.
-        beta (float): Adaptivity weight.
-        memory_length (Optional[int]): Internal memory length for moving average. None for no refreshing.
-        maximize (bool): Maximize the objective with respect to the parameters instead of minimizing.
-
-    """
 
     def __init__(
         self,
@@ -43,58 +33,8 @@ class SRMM(BaseOptimizer):
         return 'SRMM'
 
     def init_group(self, group: ParamGroup, **kwargs) -> None:
-        if 'step' not in group:
-            group['step'] = 0
-
-        for p in group['params']:
-            if p.grad is None:
-                continue
-
-            grad = p.grad
-            if grad.is_sparse:
-                raise NoSparseGradientError(str(self))
-
-            if torch.is_complex(p):
-                raise NoComplexParameterError(str(self))
-
-            state = self.state[p]
-
-            if len(state) == 0:
-                state['mov_avg_grad'] = torch.zeros_like(grad)
-                state['mov_avg_param'] = torch.zeros_like(grad)
+        pass
 
     @torch.no_grad()
     def step(self, closure: Closure = None) -> Loss:
-        loss: Loss = None
-        if closure is not None:
-            with torch.enable_grad():
-                loss = closure()
-
-        for group in self.param_groups:
-            self.init_group(group)
-            group['step'] += 1
-
-            w_t: float = (
-                (group['step'] % (group['memory_length'] if group['memory_length'] is not None else 1)) + 1
-            ) ** -group['beta']
-
-            for p in group['params']:
-                if p.grad is None:
-                    continue
-
-                grad = p.grad
-
-                self.maximize_gradient(grad, maximize=self.maximize)
-
-                state = self.state[p]
-
-                mov_avg_grad, mov_avg_param = state['mov_avg_grad'], state['mov_avg_param']
-
-                mov_avg_grad.mul_(1.0 - w_t).add_(grad, alpha=w_t)
-                mov_avg_param.mul_(1.0 - w_t).add_(p, alpha=w_t)
-
-                mov_avg_param.add_(mov_avg_grad, alpha=-group['lr'])
-
-                p.copy_(mov_avg_param)
-
-        return loss
+        pass

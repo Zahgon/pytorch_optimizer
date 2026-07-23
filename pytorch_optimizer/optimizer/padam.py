@@ -8,20 +8,6 @@ from pytorch_optimizer.base.type import Betas, Closure, Defaults, Loss, ParamGro
 
 
 class PAdam(BaseOptimizer):
-    """Closing the Generalization Gap of Adaptive Gradient Methods in Training Deep Neural Networks.
-
-    Args:
-        params (ParamsT): Iterable of parameters to optimize or dicts defining parameter groups.
-        lr (float): Learning rate.
-        betas (Betas): Coefficients used for computing running averages of gradient and the squared Hessian trace.
-        partial (float): Partially adaptive parameter.
-        weight_decay (float): Weight decay (L2 penalty).
-        weight_decouple (bool): The optimizer uses decoupled weight decay as in AdamW.
-        fixed_decay (bool): Fix weight decay.
-        eps (float): Term added to the denominator to improve numerical stability.
-        maximize (bool): Maximize the objective with respect to the params, instead of minimizing.
-
-    """
 
     def __init__(
         self,
@@ -60,67 +46,8 @@ class PAdam(BaseOptimizer):
         return 'PAdam'
 
     def init_group(self, group: ParamGroup, **kwargs) -> None:
-        if 'step' not in group:
-            group['step'] = 0
-
-        for p in group['params']:
-            if p.grad is None:
-                continue
-
-            grad = p.grad
-            if grad.is_sparse:
-                raise NoSparseGradientError(str(self))
-
-            state = self.state[p]
-
-            if len(state) == 0:
-                state['exp_avg'] = torch.zeros_like(p)
-                state['exp_avg_sq'] = torch.zeros_like(p)
+        pass
 
     @torch.no_grad()
     def step(self, closure: Closure = None) -> Loss:
-        loss: Loss = None
-        if closure is not None:
-            with torch.enable_grad():
-                loss = closure()
-
-        for group in self.param_groups:
-            self.init_group(group)
-            group['step'] += 1
-
-            beta1, beta2 = group['betas']
-
-            bias_correction1: float = self.debias(beta1, group['step'])
-            bias_correction2_sq: float = math.sqrt(self.debias(beta2, group['step']))
-
-            step_size: float = group['lr'] * bias_correction2_sq / bias_correction1
-
-            for p in group['params']:
-                if p.grad is None:
-                    continue
-
-                grad = p.grad
-
-                state = self.state[p]
-
-                exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
-
-                p, grad, exp_avg, exp_avg_sq = self.view_as_real(p, grad, exp_avg, exp_avg_sq)
-
-                self.apply_weight_decay(
-                    p,
-                    grad=grad,
-                    lr=group['lr'],
-                    weight_decay=group['weight_decay'],
-                    weight_decouple=group['weight_decouple'],
-                    fixed_decay=group['fixed_decay'],
-                )
-
-                exp_avg.mul_(beta1).add_(grad, alpha=1.0 - beta1)
-                exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1.0 - beta2)
-
-                de_nom = exp_avg_sq.sqrt().add_(group['eps'])
-
-                p.addcdiv_(exp_avg, de_nom ** (group['partial'] * 2), value=-step_size)
-
-        return loss
+        pass

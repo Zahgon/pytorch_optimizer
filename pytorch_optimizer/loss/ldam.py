@@ -6,15 +6,6 @@ from torch.nn.functional import cross_entropy
 
 
 class LDAMLoss(nn.Module):
-    r"""Label-Distribution-Aware Margin (LDAM) Loss.
-
-    Args:
-        num_class_list (List[int]): List of the number of samples per class.
-        max_m (float): Maximum margin (the `C` term in the paper).
-        weight (Optional[torch.Tensor]): Optional class weights for re-weighting.
-        s (float): Scaling factor for logits.
-
-    """
 
     def __init__(
         self, num_class_list: List[int], max_m: float = 0.5, weight: Optional[torch.Tensor] = None, s: float = 30.0
@@ -30,12 +21,4 @@ class LDAMLoss(nn.Module):
         self.s = s
 
     def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
-        index = torch.zeros_like(y_pred, dtype=torch.bool)
-        index.scatter_(1, y_true.view(-1, 1), 1)
-
-        batch_m = torch.matmul(self.m_list.to(index.device), index.float().transpose(0, 1))
-        batch_m = batch_m.view((-1, 1))
-        x_m = y_pred - batch_m
-
-        output = torch.where(index, x_m, y_pred)
-        return cross_entropy(self.s * output, y_true, weight=self.weight)
+        pass

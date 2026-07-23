@@ -17,71 +17,10 @@ from pytorch_optimizer.optimizer.shampoo_utils import (
 
 
 def get_adjusted_lr(lr: float, param_shape: Tuple[float, ...], use_adjusted_lr: bool = False) -> float:
-    r"""Get the adjust learning rate."""
-    output_shape, *input_shape = param_shape
-    input_shape = math.prod(input_shape)
-
-    ratio: float = (
-        math.pow(max(1.0, output_shape / input_shape), 0.5)
-        if use_adjusted_lr
-        else 0.2 * math.sqrt(max(output_shape, input_shape))
-    )
-
-    return lr * ratio
+    pass
 
 
 class Muon(BaseOptimizer):
-    """Momentum Orthogonalized by Newton-schulz.
-
-    Muon internally runs standard SGD-momentum, and then performs an orthogonalization post-processing step, in which
-    each 2D parameter's update is replaced with the nearest orthogonal matrix. To efficiently orthogonalize each
-    update, we use a Newton-Schulz iteration, which has the advantage that it can be stably run in bfloat16 on the GPU.
-
-    Muon is intended to optimize only the internal ≥2D parameters of a network. Embeddings, classifier heads, and
-    scalar or vector parameters should be optimized using AdamW.
-
-    Some warnings:
-    - We believe this optimizer is unlikely to work well for training with small batch size.
-    - We believe it may not work well for fine-tuning pretrained models, but we haven't tested this.
-
-    Args:
-        params (ParamsT): The parameters to be optimized by Muon.
-        lr (float): Learning rate.
-        momentum (float): The momentum used by the internal SGD.
-        weight_decay (float): Weight decay (L2 penalty).
-        weight_decouple (bool): The optimizer uses decoupled weight decay as in AdamW.
-        nesterov (bool): Whether to use nesterov momentum.
-        ns_steps (int): The number of Newton-Schulz iterations to run. (5 is probably always enough)
-        ns_coeffs (NewtonSchulzWeights): Newton-Schulz coefficients or preset name.
-        use_adjusted_lr (bool): Whether to use adjusted learning rate, which is from the Moonlight.
-            Reference: https://github.com/MoonshotAI/Moonlight/blob/master/examples/toy_train.py
-        adamw_lr (float): The learning rate for the internal AdamW.
-        adamw_betas (tuple): The betas for the internal AdamW.
-        adamw_wd (float): The weight decay for the internal AdamW.
-        adamw_eps (float): The epsilon for the internal AdamW.
-        maximize (bool): Maximize the objective with respect to the params, instead of minimizing.
-
-    Example:
-        from pytorch_optimizer import Muon
-
-        hidden_weights = [p for p in model.body.parameters() if p.ndim >= 2]
-        hidden_gains_biases = [p for p in model.body.parameters() if p.ndim < 2]
-        non_hidden_params = [*model.head.parameters(), *model.embed.parameters()]
-
-        param_groups = [
-            dict(params=hidden_weights, lr=0.02, weight_decay=0.01, use_muon=True),
-            dict(
-                params=hidden_gains_biases + non_hidden_params,
-                lr=3e-4,
-                betas=(0.9, 0.95),
-                weight_decay=0.01,
-                use_muon=False,
-            ),
-        ]
-
-        optimizer = Muon(param_groups)
-
-    """
 
     def __init__(
         self,
@@ -140,147 +79,14 @@ class Muon(BaseOptimizer):
         return 'Muon'
 
     def init_group(self, group: ParamGroup, **kwargs) -> None:
-        if 'step' not in group:
-            group['step'] = 0
-
-        for p in group['params']:
-            if p.grad is None:
-                continue
-
-            grad = p.grad
-            if grad.is_sparse:
-                raise NoSparseGradientError(str(self))
-
-            if torch.is_complex(p):
-                raise NoComplexParameterError(str(self))
-
-            state = self.state[p]
-
-            if len(state) == 0:
-                if group['use_muon']:
-                    state['momentum_buffer'] = torch.zeros_like(p)
-                else:
-                    state['exp_avg'] = torch.zeros_like(p)
-                    state['exp_avg_sq'] = torch.zeros_like(p)
+        pass
 
     @torch.no_grad()
     def step(self, closure: Closure = None) -> Loss:
-        loss: Loss = None
-        if closure is not None:
-            with torch.enable_grad():
-                loss = closure()
-
-        for group in self.param_groups:
-            self.init_group(group)
-            group['step'] += 1
-
-            for p in group['params']:
-                if p.grad is None:
-                    continue
-
-                grad = p.grad
-
-                self.maximize_gradient(grad, maximize=self.maximize)
-
-                state = self.state[p]
-
-                self.apply_weight_decay(
-                    p,
-                    grad=grad,
-                    lr=group['lr'],
-                    weight_decay=group['weight_decay'],
-                    weight_decouple=group['weight_decouple'],
-                    fixed_decay=False,
-                )
-
-                if group['use_muon']:
-                    buf = state['momentum_buffer']
-                    buf.lerp_(grad, weight=1.0 - group['momentum'])
-
-                    update = grad.lerp_(buf, weight=group['momentum']) if group['nesterov'] else buf
-                    if update.ndim > 2:
-                        update = update.view(len(update), -1)
-
-                    update = zero_power_via_newton_schulz_5(
-                        update, num_steps=group['ns_steps'], weights=group['ns_coeffs']
-                    )
-
-                    if group.get('cautious'):
-                        self.apply_cautious(update, grad)
-
-                    lr: float = get_adjusted_lr(group['lr'], p.size(), use_adjusted_lr=group['use_adjusted_lr'])
-
-                    p.add_(update.reshape(p.shape), alpha=-lr)
-                else:
-                    exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
-
-                    beta1, beta2 = group['betas']
-
-                    bias_correction1: float = self.debias(beta1, group['step'])
-                    bias_correction2_sq: float = math.sqrt(self.debias(beta2, group['step']))
-
-                    exp_avg.lerp_(grad, weight=1.0 - beta1)
-                    exp_avg_sq.lerp_(grad.square(), weight=1.0 - beta2)
-
-                    de_nom = exp_avg_sq.sqrt().add_(group['eps']).div_(bias_correction2_sq)
-
-                    p.addcdiv_(exp_avg / bias_correction1, de_nom, value=-group['lr'])
-
-        return loss
+        pass
 
 
 class DistributedMuon(BaseOptimizer):  # pragma: no cover
-    """Momentum Orthogonalized by Newton-schulz.
-
-    Muon internally runs standard SGD-momentum, and then performs an orthogonalization post-processing step, in which
-    each 2D parameter's update is replaced with the nearest orthogonal matrix. To efficiently orthogonalize each
-    update, we use a Newton-Schulz iteration, which has the advantage that it can be stably run in bfloat16 on the GPU.
-
-    Muon is intended to optimize only the internal ≥2D parameters of a network. Embeddings, classifier heads, and
-    scalar or vector parameters should be optimized using AdamW.
-
-    Some warnings:
-    - We believe this optimizer is unlikely to work well for training with small batch size.
-    - We believe it may not work well for fine-tuning pretrained models, but we haven't tested this.
-
-    Args:
-        params (ParamsT): The parameters to be optimized by Muon.
-        lr (float): Learning rate.
-        momentum (float): The momentum used by the internal SGD.
-        weight_decay (float): Weight decay (L2 penalty).
-        weight_decouple (bool): The optimizer uses decoupled weight decay as in AdamW.
-        nesterov (bool): Whether to use nesterov momentum.
-        ns_steps (int): The number of Newton-Schulz iterations to run. (5 is probably always enough)
-        ns_coeffs (NewtonSchulzWeights): Newton-Schulz coefficients or preset name.
-        use_adjusted_lr (bool): Whether to use adjusted learning rate, which is from the Moonlight.
-            Reference: https://github.com/MoonshotAI/Moonlight/blob/master/examples/toy_train.py
-        adamw_lr (float): The learning rate for the internal AdamW.
-        adamw_betas (tuple): The betas for the internal AdamW.
-        adamw_wd (float): The weight decay for the internal AdamW.
-        adamw_eps (float): The epsilon for the internal AdamW.
-        maximize (bool): Maximize the objective with respect to the params, instead of minimizing.
-
-    Example:
-        from pytorch_optimizer import DistributedMuon
-
-        hidden_weights = [p for p in model.body.parameters() if p.ndim >= 2]
-        hidden_gains_biases = [p for p in model.body.parameters() if p.ndim < 2]
-        non_hidden_params = [*model.head.parameters(), *model.embed.parameters()]
-
-        param_groups = [
-            dict(params=hidden_weights, lr=0.02, weight_decay=0.01, use_muon=True),
-            dict(
-                params=hidden_gains_biases + non_hidden_params,
-                lr=3e-4,
-                betas=(0.9, 0.95),
-                weight_decay=0.01,
-                use_muon=False,
-            ),
-        ]
-
-        optimizer = DistributedMuon(param_groups)
-
-    """
 
     def __init__(
         self,
@@ -342,156 +148,14 @@ class DistributedMuon(BaseOptimizer):  # pragma: no cover
         return 'DistributedMuon'
 
     def init_group(self, group: ParamGroup, **kwargs) -> None:
-        if 'step' not in group:
-            group['step'] = 0
-
-        for p in group['params']:
-            if p.grad is None:
-                p.grad = torch.zeros_like(p)
-
-            grad = p.grad
-            if grad.is_sparse:
-                raise NoSparseGradientError(str(self))
-
-            if torch.is_complex(p):
-                raise NoComplexParameterError(str(self))
-
-            state = self.state[p]
-
-            if len(state) == 0 and not group['use_muon']:
-                state['exp_avg'] = torch.zeros_like(p)
-                state['exp_avg_sq'] = torch.zeros_like(p)
+        pass
 
     @torch.no_grad()
     def step(self, closure: Closure = None) -> Loss:
-        loss: Loss = None
-        if closure is not None:
-            with torch.enable_grad():
-                loss = closure()
-
-        for group in self.param_groups:
-            self.init_group(group)
-            group['step'] += 1
-
-            if group['use_muon']:
-                params = group['params']
-                padded_params = params + [torch.empty_like(params[-1])] * (
-                    self.world_size - len(params) % self.world_size
-                )
-
-                for i in range(len(params))[:: self.world_size]:
-                    if i + self.rank < len(params):
-                        p = params[i + self.rank]
-
-                        grad = p.grad
-
-                        self.maximize_gradient(grad, maximize=self.maximize)
-
-                        state = self.state[p]
-                        if len(state) == 0:
-                            state['momentum_buffer'] = torch.zeros_like(p)
-
-                        self.apply_weight_decay(
-                            p,
-                            grad=grad,
-                            lr=group['lr'],
-                            weight_decay=group['weight_decay'],
-                            weight_decouple=group['weight_decouple'],
-                            fixed_decay=False,
-                        )
-
-                        buf = state['momentum_buffer']
-                        buf.lerp_(grad, weight=1.0 - group['momentum'])
-
-                        update = grad.lerp_(buf, weight=group['momentum']) if group['nesterov'] else buf
-                        if update.ndim > 2:
-                            update = update.view(len(update), -1)
-
-                        update = zero_power_via_newton_schulz_5(
-                            update, num_steps=group['ns_steps'], weights=group['ns_coeffs']
-                        )
-
-                        if group.get('cautious'):
-                            self.apply_cautious(update, grad)
-
-                        lr: float = get_adjusted_lr(group['lr'], p.size(), use_adjusted_lr=group['use_adjusted_lr'])
-
-                        p.add_(update.reshape(p.shape), alpha=-lr)
-
-                    all_gather(padded_params[i:i + self.world_size], padded_params[i:i + self.rank])  # fmt: skip
-            else:
-                for p in group['params']:
-                    grad = p.grad
-
-                    state = self.state[p]
-                    exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
-
-                    beta1, beta2 = group['betas']
-
-                    bias_correction1: float = self.debias(beta1, group['step'])
-                    bias_correction2_sq: float = math.sqrt(self.debias(beta2, group['step']))
-
-                    exp_avg.lerp_(grad, weight=1.0 - beta1)
-                    exp_avg_sq.lerp_(grad.square(), weight=1.0 - beta2)
-
-                    de_nom = exp_avg_sq.sqrt().add_(group['eps']).div_(bias_correction2_sq)
-
-                    p.addcdiv_(exp_avg / bias_correction1, de_nom, value=-group['lr'])
-
-        return loss
+        pass
 
 
 class AdaMuon(BaseOptimizer):
-    """Adaptive Muon optimizer.
-
-    Muon internally runs standard SGD-momentum, and then performs an orthogonalization post-processing step, in which
-    each 2D parameter's update is replaced with the nearest orthogonal matrix. To efficiently orthogonalize each
-    update, we use a Newton-Schulz iteration, which has the advantage that it can be stably run in bfloat16 on the GPU.
-
-    Muon is intended to optimize only the internal ≥2D parameters of a network. Embeddings, classifier heads, and
-    scalar or vector parameters should be optimized using AdamW.
-
-    Some warnings:
-    - We believe this optimizer is unlikely to work well for training with small batch size.
-    - We believe it may not work well for fine-tuning pretrained models, but we haven't tested this.
-
-    Args:
-        params (ParamsT): The parameters to be optimized by Muon.
-        lr (float): Learning rate.
-        betas (tuple): Coefficients used for computing running averages of gradient and the squared Hessian trace.
-        weight_decay (float): Weight decay (L2 penalty).
-        weight_decouple (bool): The optimizer uses decoupled weight decay as in AdamW.
-        ns_steps (int): The number of Newton-Schulz iterations to run. (5 is probably always enough)
-        ns_coeffs (NewtonSchulzWeights): Newton-Schulz coefficients or preset name.
-        use_adjusted_lr (bool): Whether to use adjusted learning rate, which is from the Moonlight.
-            Reference: https://github.com/MoonshotAI/Moonlight/blob/master/examples/toy_train.py
-        adamw_lr (float): The learning rate for the internal AdamW.
-        adamw_betas (tuple): The betas for the internal AdamW.
-        adamw_wd (float): The weight decay for the internal AdamW.
-        eps (float): Term added to the denominator to improve numerical stability.
-        maximize (bool): Maximize the objective with respect to the params, instead of minimizing.
-
-    Example:
-        from pytorch_optimizer import AdaMuon
-
-        hidden_weights = [p for p in model.body.parameters() if p.ndim >= 2]
-        hidden_gains_biases = [p for p in model.body.parameters() if p.ndim < 2]
-        non_hidden_params = [*model.head.parameters(), *model.embed.parameters()]
-
-        param_groups = [
-            dict(params=hidden_weights, lr=0.02, weight_decay=0.01, use_muon=True),
-            dict(
-                params=hidden_gains_biases + non_hidden_params,
-                lr=3e-4,
-                betas=(0.9, 0.95),
-                weight_decay=0.01,
-                use_muon=False,
-            ),
-        ]
-
-        optimizer = AdaMuon(param_groups)
-
-    """
 
     def __init__(
         self,
@@ -548,145 +212,14 @@ class AdaMuon(BaseOptimizer):
         return 'AdaMuon'
 
     def init_group(self, group: ParamGroup, **kwargs) -> None:
-        if 'step' not in group:
-            group['step'] = 0
-
-        for p in group['params']:
-            if p.grad is None:
-                continue
-
-            grad = p.grad
-            if grad.is_sparse:
-                raise NoSparseGradientError(str(self))
-
-            if torch.is_complex(p):
-                raise NoComplexParameterError(str(self))
-
-            state = self.state[p]
-
-            if len(state) == 0:
-                if group['use_muon']:
-                    state['m'] = torch.zeros_like(p)
-                    state['v'] = torch.zeros_like(p.flatten())
-                else:
-                    state['exp_avg'] = torch.zeros_like(p)
-                    state['exp_avg_sq'] = torch.zeros_like(p)
+        pass
 
     @torch.no_grad()
     def step(self, closure: Closure = None) -> Loss:
-        loss: Loss = None
-        if closure is not None:
-            with torch.enable_grad():
-                loss = closure()
-
-        for group in self.param_groups:
-            self.init_group(group)
-            group['step'] += 1
-
-            beta1, beta2 = group['betas']
-
-            bias_correction1: float = self.debias(beta1, group['step'])
-            bias_correction2: float = self.debias(beta2, group['step'])
-
-            for p in group['params']:
-                if p.grad is None:
-                    continue
-
-                grad = p.grad
-
-                self.maximize_gradient(grad, maximize=self.maximize)
-
-                state = self.state[p]
-
-                self.apply_weight_decay(
-                    p,
-                    grad=grad,
-                    lr=group['lr'],
-                    weight_decay=group['weight_decay'],
-                    weight_decouple=group['weight_decouple'],
-                    fixed_decay=False,
-                )
-
-                if group['use_muon']:
-                    m = state['m']
-                    m.lerp_(grad, weight=1.0 - beta1)
-
-                    update = m.clone()
-
-                    if update.ndim > 2:
-                        update = update.view(len(update), -1)
-
-                    update = zero_power_via_newton_schulz_5(
-                        update, num_steps=group['ns_steps'], weights=group['ns_coeffs']
-                    ).flatten()
-
-                    v = state['v']
-                    v.mul_(beta2).addcmul_(update, update, value=1.0 - beta2)
-
-                    update.div_((v / bias_correction2).sqrt_().add_(group['eps']))
-                    update = update.reshape(p.size())
-
-                    update.mul_(0.2 * math.sqrt(p.numel())).div_(update.norm().add_(group['eps']))
-
-                    lr: float = get_adjusted_lr(group['lr'], p.size(), use_adjusted_lr=group['use_adjusted_lr'])
-
-                    p.add_(update, alpha=-lr)
-                else:
-                    exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
-
-                    exp_avg.lerp_(grad, weight=1.0 - beta1)
-                    exp_avg_sq.lerp_(grad.square(), weight=1.0 - beta2)
-
-                    de_nom = exp_avg_sq.sqrt().add_(group['eps']).div_(math.sqrt(bias_correction2))
-
-                    p.addcdiv_(exp_avg / bias_correction1, de_nom, value=-group['lr'])
-
-        return loss
+        pass
 
 
 class AdaGO(BaseOptimizer):
-    """AdaGrad Meets Muon: Adaptive Stepsizes for Orthogonal Updates.
-
-    Args:
-        params (ParamsT): The parameters to be optimized by Muon.
-        lr (float): Learning rate.
-        momentum (float): The momentum used by the internal SGD.
-        weight_decay (float): Weight decay (L2 penalty).
-        weight_decouple (bool): The optimizer uses decoupled weight decay as in AdamW.
-        nesterov (bool): Whether to use nesterov momentum.
-        gamma (float): Gamma factor. Empirically, AdaGO performs robustly across a wide range of gamma values.
-        eps (float): Epsilon value. Lower bound eps > 0 on the stepsizes.
-        ns_steps (int): The number of Newton-Schulz iterations to run. (5 is probably always enough)
-        ns_coeffs (NewtonSchulzWeights): Newton-Schulz coefficients or preset name.
-        use_adjusted_lr (bool): Whether to use adjusted learning rate, which is from the Moonlight.
-            Reference: https://github.com/MoonshotAI/Moonlight/blob/master/examples/toy_train.py
-        adamw_lr (float): The learning rate for the internal AdamW.
-        adamw_betas (tuple): The betas for the internal AdamW.
-        adamw_wd (float): The weight decay for the internal AdamW.
-        adamw_eps (float): The epsilon for the internal AdamW.
-        maximize (bool): Maximize the objective with respect to the params, instead of minimizing.
-
-    Example:
-        from pytorch_optimizer import AdaGO
-
-        hidden_weights = [p for p in model.body.parameters() if p.ndim >= 2]
-        hidden_gains_biases = [p for p in model.body.parameters() if p.ndim < 2]
-        non_hidden_params = [*model.head.parameters(), *model.embed.parameters()]
-
-        param_groups = [
-            dict(params=hidden_weights, lr=0.02, weight_decay=0.01, use_muon=True),
-            dict(
-                params=hidden_gains_biases + non_hidden_params,
-                lr=3e-4,
-                betas=(0.9, 0.95),
-                weight_decay=0.01,
-                use_muon=False,
-            ),
-        ]
-
-        optimizer = AdaGO(param_groups)
-
-    """
 
     def __init__(
         self,
@@ -754,99 +287,11 @@ class AdaGO(BaseOptimizer):
         return 'AdaGO'
 
     def init_group(self, group: ParamGroup, **kwargs) -> None:
-        if 'step' not in group:
-            group['step'] = 0
-
-        for p in group['params']:
-            if p.grad is None:
-                continue
-
-            grad = p.grad
-            if grad.is_sparse:
-                raise NoSparseGradientError(str(self))
-
-            if torch.is_complex(p):
-                raise NoComplexParameterError(str(self))
-
-            state = self.state[p]
-
-            if len(state) == 0:
-                if group['use_muon']:
-                    state['momentum_buffer'] = torch.zeros_like(p)
-                    state['v'] = torch.tensor(group['v'], dtype=p.dtype, device=p.device)
-                else:
-                    state['exp_avg'] = torch.zeros_like(p)
-                    state['exp_avg_sq'] = torch.zeros_like(p)
+        pass
 
     @torch.no_grad()
     def step(self, closure: Closure = None) -> Loss:
-        loss: Loss = None
-        if closure is not None:
-            with torch.enable_grad():
-                loss = closure()
-
-        for group in self.param_groups:
-            self.init_group(group)
-            group['step'] += 1
-
-            for p in group['params']:
-                if p.grad is None:
-                    continue
-
-                grad = p.grad
-
-                self.maximize_gradient(grad, maximize=self.maximize)
-
-                state = self.state[p]
-
-                self.apply_weight_decay(
-                    p,
-                    grad=grad,
-                    lr=group['lr'],
-                    weight_decay=group['weight_decay'],
-                    weight_decouple=group['weight_decouple'],
-                    fixed_decay=False,
-                )
-
-                if group['use_muon']:
-                    buf, v = state['momentum_buffer'], state['v']
-                    buf.lerp_(grad, weight=1.0 - group['momentum'])
-
-                    v.add_(min(grad.norm(p=2.0).pow(2), group['gamma'] ** 2))
-
-                    update = grad.lerp_(buf, weight=group['momentum']) if group['nesterov'] else buf
-                    if update.ndim > 2:
-                        update = update.view(len(update), -1)
-
-                    update = zero_power_via_newton_schulz_5(
-                        update, num_steps=group['ns_steps'], weights=group['ns_coeffs']
-                    )
-
-                    if group.get('cautious'):
-                        self.apply_cautious(update, grad)
-
-                    lr: float = get_adjusted_lr(group['lr'], p.size(), use_adjusted_lr=group['use_adjusted_lr'])
-
-                    p.add_(
-                        update.reshape(p.shape),
-                        alpha=-max(group['eps'], lr * min(grad.norm(2), group['gamma']) / v).item(),
-                    )
-                else:
-                    exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
-
-                    beta1, beta2 = group['betas']
-
-                    bias_correction1: float = self.debias(beta1, group['step'])
-                    bias_correction2_sq: float = math.sqrt(self.debias(beta2, group['step']))
-
-                    exp_avg.lerp_(grad, weight=1.0 - beta1)
-                    exp_avg_sq.lerp_(grad.square(), weight=1.0 - beta2)
-
-                    de_nom = exp_avg_sq.sqrt().add_(group['eps']).div_(bias_correction2_sq)
-
-                    p.addcdiv_(exp_avg / bias_correction1, de_nom, value=-group['lr'])
-
-        return loss
+        pass
 
 
 def prepare_muon_parameters(

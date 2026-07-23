@@ -183,105 +183,10 @@ def compute_spectral_ball_update(
     solver_tolerance_f: float,
     solver_max_iterations: int,
 ) -> torch.Tensor:
-    """Compute spectral ball constrained update direction (dispatcher).
-
-    This is the main entry point that dispatches to either single-rank or
-    tensor-parallel implementations based on the TP configuration.
-
-    Algorithm overview:
-    1. Power iteration to get sigma, u, v
-    2. Retract W to spectral sphere: W ← (R / sigma)W
-    3. Form Θ = uv^T
-    4. Solve for lambda: <Θ, msign(M + lambdaΘ)> = 0
-    5. Return Φ = msign(M + lambdaΘ)
-
-    The msign function uses Polar-Express coefficients for fast convergence.
-
-    Args:
-        weight: Current weight matrix (modified in-place for retraction)
-        momentum: Momentum tensor
-        power_iteration_steps: Number of power iteration steps
-        msign_steps: Number of Newton-Schulz iterations (uses Polar-Express coefficients)
-        solver_tolerance_f: Function tolerance for solver
-        solver_max_iterations: Maximum solver iterations
-
-    Returns:
-        Update direction Φ to be applied as W ← W - lr * Φ, retraction bias, and current spectral norm sigma.
-
-    Note:
-        W is modified in-place during the retraction step.
-
-    """
-    momentum_fp32 = momentum.to(torch.float32)
-    momentum_fp32 = momentum_fp32 / (torch.linalg.norm(momentum_fp32, dim=(-2, -1), keepdim=True).clamp_min_(1e-8))
-
-    u, v = power_iteration(weight, steps=power_iteration_steps)
-
-    theta = u @ v.transpose(-2, -1)
-
-    lambda_value = solve_lambda_with_bisection(
-        momentum_fp32,
-        theta=theta,
-        initial_guess=0.0,
-        initial_step=1e-3,
-        tolerance_f=solver_tolerance_f,
-        max_iterations=solver_max_iterations,
-        max_expansions=10,
-        msign_steps=msign_steps,
-    )
-
-    z = momentum_fp32 + lambda_value * theta
-
-    return msign(z, steps=msign_steps)
+    pass
 
 
 class SpectralSphere(BaseOptimizer):
-    """Controlled LLM Training on Spectral Sphere.
-
-    This optimizer constrains weight matrices to lie on a spectral sphere of fixed radius R,
-    where ||W||_2 = R. The optimization proceeds by:
-
-    1. Power iteration to compute spectral norm sigma and top singular vectors (u, v)
-    2. Retraction to spectral sphere: W ← (R / sigma) * W
-    3. Form Θ = u @ v^T
-    4. Solve for Lagrange multiplier lambda: <Θ, msign(M + lambdaΘ)> = 0
-    5. Compute update direction: Φ = msign(M + lambdaΘ)
-    6. Update: W ← W - lr * Φ
-
-    The key insight is that the retraction step at the end of iteration t is equivalent to
-    the retraction at the beginning of iteration t+1. This allows us to unify the power
-    iteration for both retraction and Theta computation in a single efficient step.
-
-    References:
-        - Spectral MuP: Spectral Control of Feature Learning
-        - Modular Duality in Deep Learning. arXiv:2410.21265 (2024).
-
-    Args:
-        params (ParamsT): The parameters to be optimized by Muon.
-        lr (float): Learning rate.
-        momentum (float): The momentum used by the internal SGD.
-        weight_decay (float): Weight decay (L2 penalty).
-        weight_decouple (bool): The optimizer uses decoupled weight decay as in AdamW.
-        nesterov (bool): Whether to use nesterov momentum.
-        power_iteration_steps (int): Number of power iteration steps for spectral norm computation.
-        msign_steps (int): Number of Newton-Schulz iterations for msign (uses Polar-Express).
-        solver_tolerance_f (float): Function value tolerance for solver.
-        solver_max_iterations (int): Maximum iterations for solver.
-        maximize (bool): Maximize the objective with respect to the params, instead of minimizing.
-
-    Example:
-        from pytorch_optimizer import SpectralSphere
-
-        hidden_weights = [p for p in model.body.parameters() if p.ndim >= 2]
-
-        param_groups = [
-            dict(params=hidden_weights, lr=0.02, weight_decay=0.01),
-        ]
-
-        optimizer = SpectralSphere(param_groups)
-        ...
-
-    """
 
     def __init__(
         self,
@@ -326,72 +231,8 @@ class SpectralSphere(BaseOptimizer):
         return 'SpectralSphere'
 
     def init_group(self, group: ParamGroup, **kwargs) -> None:
-        if 'step' not in group:
-            group['step'] = 0
-
-        for p in group['params']:
-            if p.grad is None:
-                continue
-
-            if p.dim() != 2:
-                raise ValueError(f'{self} only supports 2D parameters')
-
-            grad = p.grad
-            if grad.is_sparse:
-                raise NoSparseGradientError(str(self))
-
-            if torch.is_complex(p):
-                raise NoComplexParameterError(str(self))
-
-            state = self.state[p]
-
-            if 'momentum_buffer' not in state:
-                state['momentum_buffer'] = torch.zeros_like(p)
+        pass
 
     @torch.no_grad()
     def step(self, closure: Closure = None) -> Loss:
-        loss: Loss = None
-        if closure is not None:
-            with torch.enable_grad():
-                loss = closure()
-
-        for group in self.param_groups:
-            self.init_group(group)
-            group['step'] += 1
-
-            for p in group['params']:
-                if p.grad is None:
-                    continue
-
-                grad = p.grad
-
-                self.maximize_gradient(grad, maximize=self.maximize)
-
-                state = self.state[p]
-
-                self.apply_weight_decay(
-                    p,
-                    grad=grad,
-                    lr=group['lr'],
-                    weight_decay=group['weight_decay'],
-                    weight_decouple=group['weight_decouple'],
-                    fixed_decay=False,
-                )
-
-                buf = state['momentum_buffer']
-                buf.lerp_(grad, weight=1.0 - group['momentum'])
-
-                update = grad.lerp_(buf, weight=group['momentum']) if group['nesterov'] else buf
-
-                update = compute_spectral_ball_update(
-                    p,
-                    momentum=update,
-                    power_iteration_steps=self.power_iteration_steps,
-                    msign_steps=self.msign_steps,
-                    solver_tolerance_f=self.solver_tolerance_f,
-                    solver_max_iterations=self.solver_max_iterations,
-                )
-
-                p.add_(update, alpha=-group['lr'])
-
-        return loss
+        pass

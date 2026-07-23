@@ -56,19 +56,6 @@ else:
 
 
 class CPUOffloadOptimizer:  # pragma: no cover
-    r"""Offload optimizer to CPU for single-GPU training. This will reduce GPU memory by the size of optimizer state.
-
-    Reference: https://github.com/pytorch/ao/blob/main/torchao/prototype/low_bit_optim/cpu_offload.py
-
-    Args:
-        params (ParamsT): A list of parameters or parameter groups.
-        optimizer_class (Type[torch.optim.Optimizer]): Constructor of the base optimizer.
-            Defaults to :class:`torch.optim.AdamW`.
-        offload_gradients (bool, optional): Free GPU gradients once they are moved to CPU.
-            Not compatible with gradient accumulation. Defaults to False.
-        kwargs (Dict): Other keyword arguments to be passed to the base optimizer, e.g. `lr`, `weight_decay`.
-
-    """
 
     def __init__(
         self,
@@ -95,23 +82,7 @@ class CPUOffloadOptimizer:  # pragma: no cover
         self.queue = {}
 
         def backward_hook(p_cuda: torch.Tensor) -> None:
-            if p_cuda.grad is None:
-                return
-
-            p_cpu = self.param_cuda2cpu_map[p_cuda]
-
-            self.stream.wait_stream(torch.cuda.current_stream())
-            with torch.cuda.stream(self.stream):
-                p_cpu.grad.copy_(p_cuda.grad, non_blocking=True)
-
-            if p_cuda in self.queue:
-                del self.queue[p_cuda]
-
-            self.queue[p_cuda] = self.stream.record_event()
-
-            if offload_gradients:
-                p_cuda.grad.record_stream(self.stream)
-                p_cuda.grad = None
+            pass
 
         for param_group in param_groups:
             params = param_group.get('params', None)  # type: ignore
@@ -130,87 +101,35 @@ class CPUOffloadOptimizer:  # pragma: no cover
 
     @torch.no_grad()
     def step(self, closure: Closure = None) -> Loss:
-        loss = None
-        if closure is not None:
-            loss = closure()
-
-        for p_cuda, grad_d2h_event in self.queue.items():
-            grad_d2h_event.synchronize()
-            self.optim_dict[p_cuda].step()
-
-            p_cpu = self.param_cuda2cpu_map[p_cuda]
-            with torch.cuda.stream(self.stream):
-                p_cuda.copy_(p_cpu, non_blocking=True)
-
-        self.queue.clear()
-
-        return loss
+        pass
 
     def zero_grad(self, _: bool = True) -> None:
-        for p_cuda in self.param_cuda2cpu_map:
-            p_cuda.grad = None
+        pass
 
     @property
     def param_groups(self):
-        return functools.reduce(operator.add, (optim.param_groups for optim in self.optim_dict.values()), [])
+        pass
 
     def state_dict(self):
-        return [optim.state_dict() for optim in self.optim_dict.values()]
+        pass
 
     def load_state_dict(self, state_dict):
-        for optim, optim_state_dict in zip(self.optim_dict.values(), state_dict):
-            optim.load_state_dict(optim_state_dict)
+        pass
 
 
 class StochasticAccumulator:
-    """Stochastic accumulator.
-
-    Example:
-        model = YourModel()
-
-        # Apply stochastic gradient accumulator hooks
-        StochasticAccumulator.assign_hooks(model)
-
-        while True:
-            loss = model.loss(*your_model_input)
-            for _ in range(grad_accum_length):
-                loss.backward()
-
-            StochasticAccumulator.reassign_grad_buffer(model)
-
-            optimizer.step()
-            optimizer.zero_grad()
-
-    """
 
     @staticmethod
     def stochastic_grad_accum(p: torch.Tensor) -> None:
-        if hasattr(p, 'acc_grad'):
-            acc_grad_fp32 = p.acc_grad.clone().to(torch.float32)
-            acc_grad_fp32.add_(p.grad.to(torch.float32))
-
-            copy_stochastic(p.acc_grad, acc_grad_fp32)
-
-            del acc_grad_fp32
-        else:
-            p.acc_grad = p.grad.clone().to(torch.bfloat16)
-
-        del p.grad
+        pass
 
     @staticmethod
     def reassign_grad_buffer(model: nn.Module) -> None:
-        for _, p in model.named_parameters():
-            if p.requires_grad and hasattr(p, 'acc_grad'):
-                p.grad = p.acc_grad
-                del p.acc_grad
+        pass
 
     @staticmethod
     def assign_hooks(model: nn.Module) -> List:
-        return [
-            p.register_post_accumulate_grad_hook(StochasticAccumulator.stochastic_grad_accum)
-            for _, p in model.named_parameters()
-            if p.requires_grad
-        ]
+        pass
 
 
 def is_valid_parameters(parameters: ParamsT) -> bool:
@@ -273,16 +192,13 @@ def clip_grad_norm(
     if isinstance(parameters, torch.Tensor):
         parameters = [parameters]
 
-    # make sure any generators are expanded
     parameters = cast(List, list(parameters))
 
-    # if syncing we need to manually perform the clipping so that we aggregate properly
     if max_norm > 0 and not sync:
         return clip_grad_norm_(parameters, max_norm)
 
     norm_sq = sum(p.grad.norm() ** 2 for p in parameters if p.grad is not None)
     if sync:  # pragma: no cover
-        # also need to get the norms from all the other sharded works in FSDP
         all_reduce(norm_sq)
 
     grad_norm: float = math.sqrt(norm_sq)
@@ -317,9 +233,7 @@ def disable_running_stats(model: nn.Module):
     """Disable running stats (momentum) of BatchNorm."""
 
     def _disable(module):
-        if isinstance(module, _BatchNorm):
-            module.backup_momentum = module.momentum
-            module.momentum = 0
+        pass
 
     model.apply(_disable)
 
@@ -328,8 +242,7 @@ def enable_running_stats(model: nn.Module):
     """Enable running stats (momentum) of BatchNorm."""
 
     def _enable(module):
-        if isinstance(module, _BatchNorm) and hasattr(module, 'backup_momentum'):
-            module.momentum = module.backup_momentum
+        pass
 
     model.apply(_enable)
 

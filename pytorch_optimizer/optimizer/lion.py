@@ -9,20 +9,6 @@ from pytorch_optimizer.optimizer.gradient_centralization import centralize_gradi
 
 
 class Lion(BaseOptimizer):
-    """Symbolic Discovery of Optimization Algorithms.
-
-    Args:
-        params (ParamsT): Iterable of parameters to optimize or dicts defining parameter groups.
-        lr (float): Learning rate.
-        betas (Betas): Coefficients used for computing running averages of gradient and the squared Hessian trace.
-        weight_decay (float): Weight decay (L2 penalty).
-        weight_decouple (bool): The optimizer uses decoupled weight decay as in AdamW.
-        fixed_decay (bool): Fix weight decay.
-        foreach (Optional[bool]): Whether to use foreach (multi-tensor) operations for speed.
-            None means auto-detect based on device (True for CUDA, False otherwise).
-        maximize (bool): Maximize the objective with respect to the params, instead of minimizing.
-
-    """
 
     def __init__(
         self,
@@ -59,40 +45,10 @@ class Lion(BaseOptimizer):
         return 'Lion'
 
     def init_group(self, group: ParamGroup, **kwargs) -> None:
-        if 'step' not in group:
-            group['step'] = 0
-
-        for p in group['params']:
-            if p.grad is None:
-                continue
-
-            grad = p.grad
-            if grad.is_sparse:
-                raise NoSparseGradientError(str(self))
-
-            state = self.state[p]
-
-            if len(state) == 0:
-                state['exp_avg'] = torch.zeros_like(p)
-
-                if group.get('adanorm'):
-                    state['exp_grad_adanorm'] = torch.zeros((1,), dtype=grad.dtype, device=grad.device)
+        pass
 
     def _can_use_foreach(self, group: ParamGroup) -> bool:
-        """Check if foreach can be used for this group.
-
-        Foreach is disabled when using features that require per-parameter handling:
-        - Gradient centralization
-        - AdaNorm
-        - Cautious updates
-        """
-        if group.get('foreach') is False:
-            return False
-
-        if group.get('use_gc') or group.get('adanorm') or group.get('cautious'):
-            return False
-
-        return self.can_use_foreach(group, group.get('foreach'))
+        pass
 
     def _step_foreach(
         self,
@@ -101,92 +57,11 @@ class Lion(BaseOptimizer):
         grads: List[torch.Tensor],
         exp_avgs: List[torch.Tensor],
     ) -> None:
-        beta1, beta2 = group['betas']
-        lr = group['lr']
-
-        if self.maximize:
-            torch._foreach_neg_(grads)
-
-        self.apply_weight_decay_foreach(
-            params=params,
-            grads=grads,
-            lr=lr,
-            weight_decay=group['weight_decay'],
-            weight_decouple=group['weight_decouple'],
-            fixed_decay=group['fixed_decay'],
-        )
-
-        updates = torch._foreach_mul(exp_avgs, beta1)
-        torch._foreach_add_(updates, grads, alpha=1.0 - beta1)
-        torch._foreach_sign_(updates)
-
-        torch._foreach_mul_(exp_avgs, beta2)
-        torch._foreach_add_(exp_avgs, grads, alpha=1.0 - beta2)
-
-        torch._foreach_add_(params, updates, alpha=-lr)
+        pass
 
     def _step_per_param(self, group: ParamGroup) -> None:
-        beta1, beta2 = group['betas']
-
-        for p in group['params']:
-            if p.grad is None:
-                continue
-
-            grad = p.grad
-
-            self.maximize_gradient(grad, maximize=self.maximize)
-
-            state = self.state[p]
-
-            exp_avg = state['exp_avg']
-
-            p, grad, exp_avg = self.view_as_real(p, grad, exp_avg)
-
-            if group.get('use_gc'):
-                centralize_gradient(grad, gc_conv_only=False)
-
-            self.apply_weight_decay(
-                p=p,
-                grad=grad,
-                lr=group['lr'],
-                weight_decay=group['weight_decay'],
-                weight_decouple=group['weight_decouple'],
-                fixed_decay=group['fixed_decay'],
-            )
-
-            s_grad = self.get_adanorm_gradient(
-                grad=grad,
-                adanorm=group.get('adanorm', False),
-                exp_grad_norm=state.get('exp_grad_adanorm', None),
-                r=group.get('adanorm_r', None),
-            )
-
-            update = exp_avg.clone()
-
-            update.mul_(beta1).add_(grad, alpha=1.0 - beta1).sign_()
-            exp_avg.mul_(beta2).add_(s_grad, alpha=1.0 - beta2)
-
-            if group.get('cautious'):
-                self.apply_cautious(update, grad)
-
-            p.add_(update, alpha=-group['lr'])
+        pass
 
     @torch.no_grad()
     def step(self, closure: Closure = None) -> Loss:
-        loss: Loss = None
-        if closure is not None:
-            with torch.enable_grad():
-                loss = closure()
-
-        for group in self.param_groups:
-            self.init_group(group)
-            group['step'] += 1
-
-            if self._can_use_foreach(group):
-                params, grads, state_dict = self.collect_trainable_params(group, self.state, state_keys=['exp_avg'])
-                if params:
-                    self._step_foreach(group, params, grads, state_dict['exp_avg'])
-            else:
-                self._step_per_param(group)
-
-        return loss
+        pass
